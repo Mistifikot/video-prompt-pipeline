@@ -47,6 +47,7 @@ except ImportError:
         return len(errors) == 0, errors
 
 from pipeline import VideoPromptPipeline
+from workflow_manager import VideoImagePromptWorkflow
 
 # Импорт Veo 3.1 генератора (опционально)
 try:
@@ -66,6 +67,17 @@ if not is_valid:
         raise RuntimeError("OPENAI_API_KEY обязателен для работы приложения!")
 
 app = FastAPI(title="Video Prompt Pipeline API", version="1.0.0")
+
+
+def _parse_optional_bool(value: Optional[str]) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    value_str = str(value).strip().lower()
+    if value_str in {"", "none"}:
+        return None
+    return value_str in {"1", "true", "yes", "on"}
 
 # CORS для фронтенда
 app.add_middleware(
@@ -89,6 +101,16 @@ try:
 except Exception as e:
     logger.error(f"Ошибка инициализации pipeline: {e}")
     raise
+
+try:
+    workflow_orchestrator = VideoImagePromptWorkflow(
+        pipeline=pipeline,
+        kie_api_key=KIE_API_KEY,
+    )
+    logger.info("Workflow orchestrator инициализирован")
+except Exception as workflow_error:
+    workflow_orchestrator = None
+    logger.error(f"Не удалось инициализировать workflow orchestrator: {workflow_error}")
 
 # Инициализация Veo 3.1 генератора
 veo31_generator = None
@@ -128,7 +150,10 @@ async def root():
             "veo31_analyze_and_prompt": "/veo31/analyze-and-prompt",
             "veo31_generate_with_prompt": "/veo31/generate-with-prompt",
             "veo31_status": "/veo31/status/{task_id}",
-            "veo31_kie_status": "/veo31/kie-status/{task_id}"
+            "veo31_kie_status": "/veo31/kie-status/{task_id}",
+            "workflow_start": "/workflow/start",
+            "workflow_submit": "/workflow/submit",
+            "workflow_state": "/workflow/{workflow_id}"
         }
     }
 
@@ -189,6 +214,76 @@ async def analyze_media(
     except Exception as e:
         logger.error(f"Ошибка анализа медиа: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Ошибка анализа: {str(e)}")
+
+
+@app.post("/workflow/start")
+async def workflow_start(
+    video_url: str = Form(...),
+    image_url: str = Form(...),
+    platform: str = Form("veo3"),
+    use_case: str = Form("general"),
+    polish_with_perplexity: Optional[str] = Form(None),
+):
+    """Полный старт workflow: анализ видео, анализ изображения, подготовка драфта промпта."""
+    if workflow_orchestrator is None:
+        raise HTTPException(status_code=500, detail="Workflow orchestrator не инициализирован")
+
+    try:
+        workflow_state = workflow_orchestrator.start_workflow(
+            video_source=video_url,
+            image_source=image_url,
+            platform=platform,
+            use_case=use_case,
+            polish_with_perplexity=_parse_optional_bool(polish_with_perplexity),
+        )
+        return JSONResponse(content=workflow_state.to_public_dict())
+    except Exception as exc:
+        logger.error(f"Ошибка запуска workflow: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка запуска workflow: {exc}")
+
+
+@app.get("/workflow/{workflow_id}")
+async def workflow_state(workflow_id: str):
+    """Возвращает сохраненное состояние workflow (драфт промпта + анализы)."""
+    if workflow_orchestrator is None:
+        raise HTTPException(status_code=500, detail="Workflow orchestrator не инициализирован")
+
+    try:
+        state = workflow_orchestrator.get_workflow_state(workflow_id)
+        return JSONResponse(content=state.to_public_dict())
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Workflow не найден")
+
+
+@app.post("/workflow/submit")
+async def workflow_submit(
+    workflow_id: str = Form(...),
+    prompt_override: Optional[str] = Form(None),
+    image_url: Optional[str] = Form(None),
+    model: str = Form("veo3_fast"),
+    aspect_ratio: str = Form("16:9"),
+    enable_translation: Optional[str] = Form(None),
+):
+    """Принимает подтвержденный пользователем промпт и отправляет задачу в Kie.ai."""
+    if workflow_orchestrator is None:
+        raise HTTPException(status_code=500, detail="Workflow orchestrator не инициализирован")
+
+    try:
+        enable_translation_flag = _parse_optional_bool(enable_translation)
+        result = workflow_orchestrator.finalize_workflow(
+            workflow_id=workflow_id,
+            user_prompt=prompt_override,
+            image_url_override=image_url,
+            model=model,
+            aspect_ratio=aspect_ratio,
+            enable_translation=True if enable_translation_flag is None else enable_translation_flag,
+        )
+        return JSONResponse(content=result)
+    except KeyError as missing:
+        raise HTTPException(status_code=404, detail=str(missing))
+    except Exception as exc:
+        logger.error(f"Ошибка завершения workflow: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка завершения workflow: {exc}")
 
 
 @app.post("/generate")

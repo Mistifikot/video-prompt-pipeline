@@ -252,6 +252,22 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
 ВАЖНО: Используй референсные изображения для объектов, материалов, композиции.
 """
 
+        workflow_context = scene_description.get("workflow_context")
+        if isinstance(workflow_context, dict):
+            stage = workflow_context.get("stage")
+            if stage == "video_camera_plus_image_subject":
+                prompt_instructions += """
+
+CRITICAL WORKFLOW INSTRUCTION:
+- Camera motion MUST follow video_analysis (camera_motion, media metadata).
+- Object identity, materials, textures MUST follow reference_image_analysis.subjects.
+- Merge lighting logically: prefer video lighting if present, otherwise derive from image context.
+"""
+            workflow_notes = workflow_context.get("instructions")
+            if isinstance(workflow_notes, dict) and workflow_notes:
+                serialized_notes = json.dumps(workflow_notes, ensure_ascii=False, indent=2)
+                prompt_instructions += f"\nДополнительные инструкции объединения (JSON):\n{serialized_notes}\n"
+
         # Для Veo 3.1 добавляем специальные инструкции по детализации
         detail_instructions = ""
         if platform == "veo3":
