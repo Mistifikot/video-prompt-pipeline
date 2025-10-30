@@ -191,6 +191,24 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
 
         return system_prompt
 
+    @staticmethod
+    def _scene_description_to_json(scene_description: Dict) -> str:
+        """Безопасное преобразование описания сцены в JSON строку."""
+
+        def default_serializer(value):
+            if isinstance(value, (set, tuple)):
+                return list(value)
+            if isinstance(value, bytes):
+                return value.decode('utf-8', errors='ignore')
+            return str(value)
+
+        return json.dumps(
+            scene_description,
+            indent=2,
+            ensure_ascii=False,
+            default=default_serializer
+        )
+
     def _generate_with_openai(self, scene_description: Dict, platform: str, use_case: str) -> str:
         """Генерирует промт через OpenAI"""
         if not self.openai_api_key:
@@ -263,7 +281,7 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
 {detail_instructions}
 
 ВХОДНЫЕ ДАННЫЕ (используй ВСЕ это):
-{json.dumps(scene_description, indent=2, ensure_ascii=False)}
+{self._scene_description_to_json(scene_description)}
 
 Платформа: {platform}
 Тип задачи: {use_case}
@@ -324,7 +342,7 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
             "Draft prompt (keep technical cues, improve flow):\n"
             f"{draft_prompt}\n\n"
             "Scene JSON (do not contradict):\n"
-            f"{json.dumps(scene_description, ensure_ascii=False)}\n\n"
+            f"{self._scene_description_to_json(scene_description)}\n\n"
             f"Platform: {platform}\nUse case: {use_case}\n"
             "Output only the polished prompt in English."
         )
