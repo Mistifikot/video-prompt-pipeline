@@ -191,6 +191,24 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
 
         return system_prompt
 
+    @staticmethod
+    def _scene_description_to_json(scene_description: Dict) -> str:
+        """Безопасное преобразование описания сцены в JSON строку."""
+
+        def default_serializer(value):
+            if isinstance(value, (set, tuple)):
+                return list(value)
+            if isinstance(value, bytes):
+                return value.decode('utf-8', errors='ignore')
+            return str(value)
+
+        return json.dumps(
+            scene_description,
+            indent=2,
+            ensure_ascii=False,
+            default=default_serializer
+        )
+
     def _generate_with_openai(self, scene_description: Dict, platform: str, use_case: str) -> str:
         """Генерирует промт через OpenAI"""
         if not self.openai_api_key:
@@ -234,6 +252,22 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
 ВАЖНО: Используй референсные изображения для объектов, материалов, композиции.
 """
 
+        workflow_context = scene_description.get("workflow_context")
+        if isinstance(workflow_context, dict):
+            stage = workflow_context.get("stage")
+            if stage == "video_camera_plus_image_subject":
+                prompt_instructions += """
+
+CRITICAL WORKFLOW INSTRUCTION:
+- Camera motion MUST follow video_analysis (camera_motion, media metadata).
+- Object identity, materials, textures MUST follow reference_image_analysis.subjects.
+- Merge lighting logically: prefer video lighting if present, otherwise derive from image context.
+"""
+            workflow_notes = workflow_context.get("instructions")
+            if isinstance(workflow_notes, dict) and workflow_notes:
+                serialized_notes = json.dumps(workflow_notes, ensure_ascii=False, indent=2)
+                prompt_instructions += f"\nДополнительные инструкции объединения (JSON):\n{serialized_notes}\n"
+
         # Для Veo 3.1 добавляем специальные инструкции по детализации
         detail_instructions = ""
         if platform == "veo3":
@@ -263,7 +297,7 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
 {detail_instructions}
 
 ВХОДНЫЕ ДАННЫЕ (используй ВСЕ это):
-{json.dumps(scene_description, indent=2, ensure_ascii=False)}
+{self._scene_description_to_json(scene_description)}
 
 Платформа: {platform}
 Тип задачи: {use_case}
@@ -324,7 +358,7 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
             "Draft prompt (keep technical cues, improve flow):\n"
             f"{draft_prompt}\n\n"
             "Scene JSON (do not contradict):\n"
-            f"{json.dumps(scene_description, ensure_ascii=False)}\n\n"
+            f"{self._scene_description_to_json(scene_description)}\n\n"
             f"Platform: {platform}\nUse case: {use_case}\n"
             "Output only the polished prompt in English."
         )

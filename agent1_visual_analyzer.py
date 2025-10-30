@@ -6,13 +6,15 @@
 import os
 import json
 import base64
-import requests
-from typing import Dict, Optional, Union, Tuple, List
-from pathlib import Path
-import mimetypes
-import cv2
-import numpy as np
+import logging
 from io import BytesIO
+from pathlib import Path
+from typing import Dict, Optional, Tuple, Union, List
+
+import mimetypes
+
+import cv2
+import requests
 from PIL import Image
 
 
@@ -23,6 +25,7 @@ class VisualAnalyzer:
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
         self.preferred_model = "gpt-4o"  # GPT-4o поддерживает vision и видео
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     def _get_analysis_prompt(self) -> str:
         """Возвращает универсальный промпт для анализа медиа"""
@@ -318,6 +321,30 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                 return True
         return False
 
+    def _resize_image(self, image: Image.Image, max_dim: int = 1280) -> Image.Image:
+        """Масштабирует изображение так, чтобы длинная сторона не превышала max_dim."""
+        if max(image.size) <= max_dim:
+            return image
+        resized = image.copy()
+        resized.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        return resized
+
+    def _encode_image(self, image: Image.Image, quality: int = 85) -> Tuple[bytes, str]:
+        """Конвертирует изображение в JPEG и возвращает байты вместе с MIME типом."""
+        buffer = BytesIO()
+        image.convert("RGB").save(buffer, format="JPEG", quality=quality)
+        return buffer.getvalue(), "image/jpeg"
+
+    def _prepare_image_bytes(self, image_bytes: bytes, max_dim: int = 1280) -> Tuple[bytes, str]:
+        """Готовит изображение для отправки в модель: ресайз и перекодирование."""
+        try:
+            with Image.open(BytesIO(image_bytes)) as img:
+                processed = self._resize_image(img, max_dim=max_dim)
+                return self._encode_image(processed)
+        except Exception as exc:
+            self.logger.debug("Image preprocessing failed, using original bytes: %s", exc)
+            return image_bytes, "image/jpeg"
+
     def _extract_video_frames(self, video_data: bytes, max_frames: int = 8) -> List[bytes]:
         """Извлекает ключевые кадры из видео для анализа"""
         try:
@@ -340,7 +367,6 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             frame_interval = max(1, total_frames // max_frames)
 
             extracted_frames = []
-            frame_indices = []
 
             for i in range(0, total_frames, frame_interval):
                 if len(extracted_frames) >= max_frames:
@@ -352,10 +378,9 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     # Кодируем в JPEG
                     img = Image.fromarray(frame_rgb)
-                    buffer = BytesIO()
-                    img.save(buffer, format='JPEG', quality=85)
-                    extracted_frames.append(buffer.getvalue())
-                    frame_indices.append(i)
+                    processed = self._resize_image(img)
+                    frame_bytes, _ = self._encode_image(processed)
+                    extracted_frames.append(frame_bytes)
 
             cap.release()
 
@@ -374,6 +399,36 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
     def _encode_media_to_base64(self, media_data: bytes) -> str:
         """Кодирует медиа в base64"""
         return base64.b64encode(media_data).decode('utf-8')
+
+    @staticmethod
+    def _extract_json_from_text(analysis_text: str) -> Dict:
+        """Пытается извлечь JSON из ответа модели."""
+        if not analysis_text:
+            return {"raw_analysis": "", "format": "empty_response"}
+
+        import re
+
+        # Ищем блоки формата ```json ... ```
+        code_block_pattern = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
+        for match in code_block_pattern.findall(analysis_text):
+            try:
+                return json.loads(match)
+            except json.JSONDecodeError:
+                continue
+
+        json_start = analysis_text.find('{')
+        json_end = analysis_text.rfind('}') + 1
+        if json_start != -1 and json_end > json_start:
+            candidate = analysis_text[json_start:json_end]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
+        return {
+            "raw_analysis": analysis_text,
+            "format": "text_response"
+        }
 
     def _analyze_with_openai(self, media_data: bytes, content_type: str, is_video: bool) -> Dict:
         """Анализ через OpenAI GPT-4o (поддерживает изображения и видео)"""
@@ -403,7 +458,10 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                     }
                 })
         else:
-            base64_image = self._encode_media_to_base64(media_data)
+            processed_bytes, detected_type = self._prepare_image_bytes(media_data)
+            base64_image = self._encode_media_to_base64(processed_bytes)
+            if detected_type:
+                content_type = detected_type
 
             # Определяем формат для OpenAI
             if 'png' in content_type or 'image/png' in content_type:
@@ -415,7 +473,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             elif 'webp' in content_type:
                 media_format = "webp"
             else:
-                media_format = "jpeg"
+                media_format = (detected_type.split('/')[-1] if detected_type else "jpeg")
 
             content_parts = [{
                 "type": "text",
@@ -455,22 +513,9 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         result = response.json()
         analysis_text = result['choices'][0]['message']['content']
 
-        # Попытка извлечь JSON из ответа
-        try:
-            # Ищем JSON в тексте
-            json_start = analysis_text.find('{')
-            json_end = analysis_text.rfind('}') + 1
-            if json_start != -1 and json_end > json_start:
-                analysis_json = json.loads(analysis_text[json_start:json_end])
-            else:
-                # Если JSON не найден, создаем структурированный объект из текста
-                analysis_json = {"raw_analysis": analysis_text}
-        except json.JSONDecodeError:
-            # Fallback: создаем структурированный ответ
-            analysis_json = {
-                "raw_analysis": analysis_text,
-                "format": "text_response"
-            }
+        analysis_json = self._extract_json_from_text(analysis_text)
+        if "raw_analysis" not in analysis_json:
+            analysis_json["raw_analysis"] = analysis_text
 
         return analysis_json
 
@@ -494,8 +539,9 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             return self._analyze_video_with_gemini_file_api(media_data, mime_type)
         else:
             # Для изображений используем inline base64
-            mime_type = content_type or "image/jpeg"
-            base64_media = self._encode_media_to_base64(media_data)
+            processed_bytes, detected_type = self._prepare_image_bytes(media_data)
+            base64_media = self._encode_media_to_base64(processed_bytes)
+            mime_type = detected_type or content_type or "image/jpeg"
 
             # Используем тот же универсальный промпт что и для OpenAI
             analysis_prompt = self._get_analysis_prompt()
@@ -535,19 +581,9 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             result = response.json()
             analysis_text = result['candidates'][0]['content']['parts'][0]['text']
 
-            # Извлекаем JSON из ответа
-            try:
-                json_start = analysis_text.find('{')
-                json_end = analysis_text.rfind('}') + 1
-                if json_start != -1 and json_end > json_start:
-                    analysis_json = json.loads(analysis_text[json_start:json_end])
-                else:
-                    analysis_json = {"raw_analysis": analysis_text}
-            except json.JSONDecodeError:
-                analysis_json = {
-                    "raw_analysis": analysis_text,
-                    "format": "text_response"
-                }
+            analysis_json = self._extract_json_from_text(analysis_text)
+            if "raw_analysis" not in analysis_json:
+                analysis_json["raw_analysis"] = analysis_text
 
             return analysis_json
 
@@ -627,19 +663,9 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         except:
             pass  # Игнорируем ошибки удаления
 
-        # Извлекаем JSON из ответа
-        try:
-            json_start = analysis_text.find('{')
-            json_end = analysis_text.rfind('}') + 1
-            if json_start != -1 and json_end > json_start:
-                analysis_json = json.loads(analysis_text[json_start:json_end])
-            else:
-                analysis_json = {"raw_analysis": analysis_text}
-        except json.JSONDecodeError:
-            analysis_json = {
-                "raw_analysis": analysis_text,
-                "format": "text_response"
-            }
+        analysis_json = self._extract_json_from_text(analysis_text)
+        if "raw_analysis" not in analysis_json:
+            analysis_json["raw_analysis"] = analysis_text
 
         return analysis_json
 
