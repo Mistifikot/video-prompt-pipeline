@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veo 3.1 - Генерация видео по образцам</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1em;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .toggle-row {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .toggle-row label {
+            font-weight: 400;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .toggle-row input[type="checkbox"] {
+            width: auto;
+            transform: scale(1.1);
+        }
+
+        .image-upload-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .image-upload-item {
+            border: 2px dashed #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .image-upload-item:hover {
+            border-color: #667eea;
+            background: #f5f5ff;
+        }
+
+        .image-upload-item.has-image {
+            border-color: #28a745;
+            background: #f0fff4;
+        }
+
+        .image-preview {
+            max-width: 100%;
+            max-height: 150px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        input[type="text"],
+        select,
+        input[type="number"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        .prompt-box {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+        }
+
+        .video-result {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .video-result video {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .info-box {
+            background: #eef2ff;
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 12px;
+            color: #333;
+        }
+
+        .attempts-box {
+            background: #f5f7fa;
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-top: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            position: relative;
+        }
+
+        .step::after {
+            content: '';
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background: #e0e0e0;
+            z-index: -1;
+        }
+
+        .step:last-child::after {
+            display: none;
+        }
+
+        .step.active {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .step-number {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            color: white;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 5px;
+        }
+
+        .step.active .step-number {
+            background: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Veo 3.1 - Генерация видео по образцам</h1>
+        <p class="subtitle">Загрузите 3 изображения + видео-референс (опционально) → Получите промпт → Сгенерируйте видео</p>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('upload')">Загрузка файлов</button>
+            <button class="tab" onclick="switchTab('urls')">Через URL</button>
+        </div>
+
+        <div class="step-indicator">
+            <div class="step active" id="step1">
+                <div class="step-number">1</div>
+                <div>Загрузка референсов</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-number">2</div>
+                <div>Анализ референсов</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-number">3</div>
+                <div>Редактирование промпта</div>
+            </div>
+            <div class="step" id="step4">
+                <div class="step-number">4</div>
+                <div>Генерация видео</div>
+            </div>
+        </div>
+
+        <!-- Вкладка загрузки файлов -->
+        <div id="upload-tab" class="tab-content active">
+            <form id="veo31Form">
+                <div class="form-group">
+                    <label>Референсные изображения (минимум 1, максимум 3):</label>
+                    <div class="image-upload-group">
+                        <div class="image-upload-item" id="img1-upload" onclick="document.getElementById('img1').click()">
+                            <input type="file" id="img1" accept="image/*" onchange="previewImage(this, 'img1-preview', 'img1-upload')">
+                            <div id="img1-preview"></div>
+                            <div>Изображение 1 * (нажмите для выбора)</div>
+                        </div>
+                        <div class="image-upload-item" id="img2-upload" onclick="document.getElementById('img2').click()">
+                            <input type="file" id="img2" accept="image/*" onchange="previewImage(this, 'img2-preview', 'img2-upload')">
+                            <div id="img2-preview"></div>
+                            <div>Изображение 2 (нажмите для выбора)</div>
+                        </div>
+                        <div class="image-upload-item" id="img3-upload" onclick="document.getElementById('img3').click()">
+                            <input type="file" id="img3" accept="image/*" onchange="previewImage(this, 'img3-preview', 'img3-upload')">
+                            <div id="img3-preview"></div>
+                            <div>Изображение 3 (нажмите для выбора)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Видео-референс (опционально):</label>
+                    <div style="margin-bottom: 10px;">
+                        <select id="videoRefType" onchange="toggleVideoRefType()" style="width: auto; display: inline-block; margin-right: 10px;">
+                            <option value="file">Загрузить файл</option>
+                            <option value="url">Указать URL</option>
+                        </select>
+                    </div>
+                    <div id="videoRefFileContainer">
+                        <input type="file" id="videoRef" accept="video/*">
+                        <small>Для анализа стиля и движения</small>
+                    </div>
+                    <div id="videoRefUrlContainer" style="display: none;">
+                        <input type="text" id="videoRefUrl" placeholder="https://example.com/reference.mp4">
+                        <small>URL видео для анализа стиля и движения</small>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                        <label for="aspectRatio">Соотношение сторон:</label>
+                        <select id="aspectRatio">
+                            <option value="16:9">16:9</option>
+                            <option value="9:16">9:16</option>
+                            <option value="1:1">1:1</option>
+                        <option value="4:3">4:3</option>
+                        <option value="21:9">21:9</option>
+                        </select>
+                    <small>Veo всегда генерирует видео длительностью 8 секунд, качество veo3_fast</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="additionalPrompt">Дополнительные инструкции (опционально):</label>
+                    <input type="text" id="additionalPrompt" placeholder="Дополнительные требования к видео">
+                </div>
+
+                <div class="form-group">
+                    <label>Опции генерации:</label>
+                    <div class="toggle-row">
+                        <label>
+                            <input type="checkbox" id="preferKie">
+                            <span>Использовать Kie.ai API (если доступен)</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" id="polishPerplexity" checked>
+                            <span>Полировать промт через Perplexity</span>
+                        </label>
+                    </div>
+                    <small>Если изображения загружаются с компьютера, для Kie.ai нужны публичные URL. Иначе будет использован Google Veo или вернётся только промпт.</small>
+                </div>
+
+                <button type="submit" class="btn" id="submitBtn">🚀 Сгенерировать видео в Veo 3.1</button>
+            </form>
+        </div>
+
+        <!-- Вкладка URL -->
+        <div id="urls-tab" class="tab-content">
+            <form id="veo31UrlForm">
+                <div class="form-group">
+                    <label for="imageUrls">URL референсных изображений (минимум 1, максимум 3, через запятую):</label>
+                    <input type="text" id="imageUrls" placeholder="https://example.com/img1.jpg, https://example.com/img2.jpg, https://example.com/img3.jpg" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="videoRefUrl">URL видео-референса (опционально):</label>
+                    <input type="text" id="videoRefUrl" placeholder="https://example.com/reference.mp4">
+                </div>
+
+                    <div class="form-group">
+                        <label for="aspectRatioUrl">Соотношение сторон:</label>
+                        <select id="aspectRatioUrl">
+                            <option value="16:9">16:9</option>
+                            <option value="9:16">9:16</option>
+                            <option value="1:1">1:1</option>
+                        <option value="4:3">4:3</option>
+                        <option value="21:9">21:9</option>
+                        </select>
+                    <small>Veo всегда генерирует видео длительностью 8 секунд, качество veo3_fast</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Опции генерации:</label>
+                    <div class="toggle-row">
+                        <label>
+                            <input type="checkbox" id="preferKieUrl" checked>
+                            <span>Использовать Kie.ai API</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" id="polishPerplexityUrl" checked>
+                            <span>Полировать промт через Perplexity</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn" id="submitUrlBtn">🚀 Сгенерировать видео в Veo 3.1</button>
+            </form>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p id="loadingText">Обработка...</p>
+        </div>
+
+        <div class="result" id="result">
+            <h2>Результат</h2>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // Конфигурация для отладки (можно отключить для продакшн)
+        const DEBUG_MODE = false; // Установите в true для отладки
+
+        function debugLog(...args) {
+            if (DEBUG_MODE) {
+                console.log(...args);
+            }
+        }
+        const selectedFiles = {
+            img1: null,
+            img2: null,
+            img3: null,
+            videoRef: null,
+            urlSettings: null,
+            settings: null
+        };
+
+        // Переменные для отслеживания статуса генерации
+        let statusCheckInterval = null;
+        let currentTaskId = null;
+        let currentProvider = null;
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+            if (tabName === 'upload') {
+                document.querySelector('.tab:nth-child(1)').classList.add('active');
+                document.getElementById('upload-tab').classList.add('active');
+                // Очищаем urlSettings при переключении на загрузку файлов
+                selectedFiles.urlSettings = null;
+            } else {
+                document.querySelector('.tab:nth-child(2)').classList.add('active');
+                document.getElementById('urls-tab').classList.add('active');
+                // Очищаем settings при переключении на URL
+                selectedFiles.settings = null;
+            }
+        }
+
+        function toggleVideoRefType() {
+            const videoRefType = document.getElementById('videoRefType').value;
+            const fileContainer = document.getElementById('videoRefFileContainer');
+            const urlContainer = document.getElementById('videoRefUrlContainer');
+
+            if (videoRefType === 'file') {
+                fileContainer.style.display = 'block';
+                urlContainer.style.display = 'none';
+            } else {
+                fileContainer.style.display = 'none';
+                urlContainer.style.display = 'block';
+            }
+        }
+
+        function previewImage(input, previewId, uploadId) {
+            const file = input.files[0];
+            if (file) {
+                selectedFiles[input.id] = file;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const preview = document.getElementById(previewId);
+                    preview.innerHTML = `<img src="${e.target.result}" class="image-preview" alt="Preview">`;
+                    document.getElementById(uploadId).classList.add('has-image');
+                };
+                reader.onerror = () => {
+                    console.error('Ошибка чтения файла');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Убираем всплытие события при клике на контейнер
+        document.querySelectorAll('.image-upload-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (e.target.tagName !== 'INPUT') {
+                    const input = item.querySelector('input[type="file"]');
+                    if (input) input.click();
+                }
+            });
+        });
+
+        function updateStep(stepNum) {
+            document.querySelectorAll('.step').forEach((s, i) => {
+                if (i < stepNum) {
+                    s.classList.add('active');
+                } else {
+                    s.classList.remove('active');
+                }
+            });
+        }
+
+        function updateLoadingText(text) {
+            document.getElementById('loadingText').textContent = text;
+        }
+
+        document.getElementById('veo31Form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const img1 = document.getElementById('img1').files[0] || selectedFiles.img1;
+            if (!img1) {
+                alert('Необходимо загрузить хотя бы одно изображение');
+                return;
+            }
+
+            // Сохраняем файлы для последующего использования
+            selectedFiles.img1 = img1;
+            const img2 = document.getElementById('img2').files[0] || selectedFiles.img2;
+            if (img2) selectedFiles.img2 = img2;
+            const img3 = document.getElementById('img3').files[0] || selectedFiles.img3;
+            if (img3) selectedFiles.img3 = img3;
+
+            const formData = new FormData();
+            formData.append('reference_image1', img1);
+
+            if (img2) formData.append('reference_image2', img2);
+            if (img3) formData.append('reference_image3', img3);
+
+            // Видео-референс: либо файл, либо URL
+            const videoRefType = document.getElementById('videoRefType').value;
+            if (videoRefType === 'file') {
+                const videoRef = document.getElementById('videoRef').files[0];
+                if (videoRef) {
+                    selectedFiles.videoRef = videoRef;
+                    formData.append('video_reference', videoRef);
+                } else if (selectedFiles.videoRef) {
+                    formData.append('video_reference', selectedFiles.videoRef);
+                }
+            } else {
+                const videoRefUrl = document.getElementById('videoRefUrl').value.trim();
+                if (videoRefUrl) {
+                    selectedFiles.videoRefUrl = videoRefUrl;
+                    formData.append('video_reference_url', videoRefUrl);
+                }
+            }
+
+            // Сохраняем настройки для генерации видео (они НЕ отправляются на этом этапе)
+            selectedFiles.settings = {
+                platform: 'veo3',
+                aspect_ratio: document.getElementById('aspectRatio').value,
+                prefer_kie_api: document.getElementById('preferKie').checked,
+                additional_prompt: document.getElementById('additionalPrompt').value
+            };
+
+            // Для анализа и генерации промпта нужны только базовые параметры
+            formData.append('platform', 'veo3');
+
+            const polishPerplexity = document.getElementById('polishPerplexity').checked;
+            formData.append('polish_with_perplexity', polishPerplexity ? 'true' : 'false');
+
+            await processGeneration(formData);
+        });
+
+        document.getElementById('veo31UrlForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData();
+            formData.append('reference_image_urls', document.getElementById('imageUrls').value);
+
+            const videoRefUrl = document.getElementById('videoRefUrl').value;
+            if (videoRefUrl) formData.append('video_reference_url', videoRefUrl);
+
+            formData.append('platform', 'veo3');
+            formData.append('aspect_ratio', document.getElementById('aspectRatioUrl').value);
+
+            const additionalPrompt = document.getElementById('additionalPrompt')?.value;
+            if (additionalPrompt) formData.append('additional_prompt', additionalPrompt);
+
+            const polishPerplexityUrl = document.getElementById('polishPerplexityUrl').checked;
+            formData.append('polish_with_perplexity', polishPerplexityUrl ? 'true' : 'false');
+
+            // Сохраняем настройки для последующей генерации
+            selectedFiles.urlSettings = {
+                image_urls: document.getElementById('imageUrls').value,
+                video_reference_url: videoRefUrl,
+                aspect_ratio: document.getElementById('aspectRatioUrl').value,
+                prefer_kie_api: document.getElementById('preferKieUrl').checked
+            };
+
+            await processGenerationUrl(formData);
+        });
+
+        async function processGeneration(formData) {
+            debugLog('🔵 [DEBUG] Начинаем анализ и генерацию промпта...');
+            debugLog('🔵 [DEBUG] Endpoint: /veo31/analyze-and-prompt');
+
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('result').classList.remove('show');
+            document.getElementById('resultContent').innerHTML = '';
+            document.getElementById('submitBtn').disabled = true;
+
+            updateStep(2);
+            updateLoadingText('Анализ референсов...');
+
+            try {
+                debugLog('🔵 [DEBUG] Отправка запроса на анализ...');
+                const response = await fetch('http://localhost:8000/veo31/analyze-and-prompt', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                debugLog('🔵 [DEBUG] Получен ответ:', response.status);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ [ERROR] Ошибка ответа:', errorText);
+                    throw new Error(`Ошибка сервера: ${response.status}. ${errorText}`);
+                }
+
+                const result = await response.json();
+                debugLog('✅ [DEBUG] Результат анализа:', result);
+                debugLog('✅ [DEBUG] step3_video_generation присутствует?', !!result.step3_video_generation);
+
+                if (result.step3_video_generation) {
+                    console.error('⚠️ [WARNING] КРИТИЧЕСКАЯ ОШИБКА: step3_video_generation присутствует в ответе анализа! Это не должно происходить.');
+                }
+
+                displayPromptForEditing(result);
+
+            } catch (error) {
+                console.error('❌ [ERROR] Ошибка:', error);
+                document.getElementById('resultContent').innerHTML = `
+                    <div class="error">
+                        <strong>Ошибка:</strong><br>
+                        ${escapeHtml(error.message)}<br><br>
+                        Убедитесь что:<br>
+                        1. Сервер запущен (START.bat)<br>
+                        2. В .env указаны ключи (OPENAI_API_KEY и при необходимости GEMINI_API_KEY / KIE_API_KEY)<br>
+                        3. Референсы доступны (URL или файлы)
+                    </div>
+                `;
+                document.getElementById('result').classList.add('show');
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+                document.getElementById('submitBtn').disabled = false;
+            }
+        }
+
+        function displayPromptForEditing(result) {
+            debugLog('🟢 [DEBUG] displayPromptForEditing вызван');
+            debugLog('🟢 [DEBUG] result keys:', Object.keys(result));
+
+            updateStep(3);
+            document.getElementById('loading').classList.remove('show');
+
+            // Очищаем предыдущие результаты и останавливаем проверку статуса если она была запущена
+            if (statusCheckInterval) {
+                debugLog('🟢 [DEBUG] Останавливаем проверку статуса');
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+            currentTaskId = null;
+            currentProvider = null;
+
+            let html = '';
+
+            if (result.step1_analysis) {
+                html += '<div class="success"><strong>✓ Анализ завершен</strong></div>';
+            }
+
+            if (result.step2_prompt || result.prompt) {
+                const promptText = result.step2_prompt || result.prompt;
+                html += `
+                    <h3>Сгенерированный промпт:</h3>
+                    <div class="prompt-box">
+                        <textarea id="editablePrompt" style="width: 100%; min-height: 200px; padding: 15px; border: 2px solid #667eea; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.5; resize: vertical;">${escapeHtml(promptText)}</textarea>
+                    </div>
+                    <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn" onclick="copyPrompt()" style="flex: 1; min-width: 150px;">📋 Копировать промпт</button>
+                        <button class="btn" style="background: #4CAF50; flex: 1; min-width: 200px;" onclick="proceedToGeneration()">➡️ Далее: Генерировать видео</button>
+                    </div>
+                    <div style="margin-top: 15px; padding: 12px; background: #e3f2fd; border-radius: 8px; color: #1565c0; border-left: 4px solid #2196F3;">
+                        <strong>ℹ️ Информация:</strong> Отредактируйте промпт в поле выше при необходимости, затем нажмите "Далее" для генерации видео. Veo сгенерирует видео длительностью 8 секунд с качеством veo3_fast.
+                    </div>
+                `;
+                window.currentPrompt = promptText;
+                window.currentAnalysis = result.step1_analysis;
+                window.editablePrompt = promptText;
+                window.generationSettings = result.generation_settings || {};
+            } else {
+                html += '<div class="error"><strong>Ошибка:</strong> Промпт не был сгенерирован Step 2.</div>';
+            }
+
+            // ВАЖНО: НЕ обрабатываем step3_video_generation здесь - это делается только после клика "Далее"
+            if (result.step3_video_generation) {
+                console.error('❌ [ERROR] КРИТИЧЕСКАЯ ОШИБКА: step3_video_generation присутствует в ответе анализа!');
+                console.error('❌ [ERROR] Данные step3_video_generation:', result.step3_video_generation);
+                html += '<div class="error"><strong>⚠️ Ошибка:</strong> Получены данные генерации видео на этапе анализа. Это не должно происходить.</div>';
+            }
+
+            document.getElementById('resultContent').innerHTML = html;
+            document.getElementById('result').classList.add('show');
+
+            debugLog('🟢 [DEBUG] displayPromptForEditing завершен');
+        }
+
+        async function proceedToGeneration() {
+            debugLog('🟡 [DEBUG] proceedToGeneration вызван - пользователь нажал "Далее"');
+
+            const editedPrompt = document.getElementById('editablePrompt').value;
+            if (!editedPrompt || editedPrompt.trim() === '') {
+                alert('Промпт не может быть пустым');
+                return;
+            }
+
+            debugLog('🟡 [DEBUG] Отредактированный промпт:', editedPrompt.substring(0, 100) + '...');
+
+            // Проверяем, используем ли мы URL или файлы
+            const urlSettings = selectedFiles.urlSettings;
+
+            if (urlSettings) {
+                // Генерация через URL
+                const formData = new FormData();
+                formData.append('prompt', editedPrompt);
+                formData.append('reference_image_urls', urlSettings.image_urls);
+                if (urlSettings.video_reference_url) {
+                    formData.append('video_reference_url', urlSettings.video_reference_url);
+                }
+                formData.append('aspect_ratio', urlSettings.aspect_ratio || '16:9');
+                formData.append('prefer_kie_api', urlSettings.prefer_kie_api ? 'true' : 'false');
+
+                debugLog('🟡 [DEBUG] Отправка запроса на генерацию видео через URL...');
+                debugLog('🟡 [DEBUG] Endpoint: /veo31/generate-with-prompt-urls');
+
+                document.getElementById('loading').classList.add('show');
+                updateStep(4);
+                updateLoadingText('Генерация видео...');
+
+                try {
+                    const response = await fetch('http://localhost:8000/veo31/generate-with-prompt-urls', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`Ошибка: ${response.status}. ${errorText}`);
+                    }
+
+                    const result = await response.json();
+                    displayResult(result);
+
+                } catch (error) {
+                    console.error('❌ [ERROR] Ошибка генерации видео:', error);
+                    document.getElementById('resultContent').innerHTML += `
+                        <div class="error">
+                            <strong>Ошибка генерации видео:</strong> ${escapeHtml(error.message)}
+                        </div>
+                    `;
+                } finally {
+                    document.getElementById('loading').classList.remove('show');
+                }
+            } else {
+                // Генерация через файлы
+            const img1 = selectedFiles.img1;
+            const img2 = selectedFiles.img2;
+            const img3 = selectedFiles.img3;
+            const settings = selectedFiles.settings || {};
+
+            if (!img1) {
+                alert('Ошибка: файлы не найдены. Пожалуйста, загрузите файлы заново.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('prompt', editedPrompt);
+            formData.append('reference_image1', img1);
+
+            if (img2) formData.append('reference_image2', img2);
+            if (img3) formData.append('reference_image3', img3);
+
+            // Видео-референс
+            if (selectedFiles.videoRef) {
+                formData.append('video_reference', selectedFiles.videoRef);
+            } else if (selectedFiles.videoRefUrl) {
+                formData.append('video_reference_url', selectedFiles.videoRefUrl);
+            }
+
+            // Используем сохраненные настройки
+            formData.append('aspect_ratio', settings.aspect_ratio || document.getElementById('aspectRatio').value);
+            formData.append('prefer_kie_api', (settings.prefer_kie_api || document.getElementById('preferKie').checked) ? 'true' : 'false');
+
+            debugLog('🟡 [DEBUG] Отправка запроса на генерацию видео...');
+            debugLog('🟡 [DEBUG] Endpoint: /veo31/generate-with-prompt');
+
+            document.getElementById('loading').classList.add('show');
+            updateStep(4);
+            updateLoadingText('Генерация видео...');
+
+            try {
+                const response = await fetch('http://localhost:8000/veo31/generate-with-prompt', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                debugLog('🟡 [DEBUG] Получен ответ:', response.status);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ [ERROR] Ошибка ответа:', errorText);
+                    throw new Error(`Ошибка: ${response.status}. ${errorText}`);
+                }
+
+                const result = await response.json();
+                debugLog('✅ [DEBUG] Результат генерации видео:', result);
+                displayResult(result);
+
+            } catch (error) {
+                console.error('❌ [ERROR] Ошибка генерации видео:', error);
+                document.getElementById('resultContent').innerHTML += `
+                    <div class="error">
+                        <strong>Ошибка генерации видео:</strong> ${escapeHtml(error.message)}
+                    </div>
+                `;
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+                }
+            }
+        }
+
+        async function processGenerationUrl(formData) {
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('result').classList.remove('show');
+            document.getElementById('submitUrlBtn').disabled = true;
+
+            updateStep(2);
+            updateLoadingText('Анализ референсов...');
+
+            try {
+                const response = await fetch('http://localhost:8000/veo31/generate-from-urls', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Ошибка: ${response.status}. ${errorText}`);
+                }
+
+                const result = await response.json();
+                displayPromptForEditing(result);
+
+            } catch (error) {
+                document.getElementById('resultContent').innerHTML = `
+                    <div class="error">
+                        <strong>Ошибка:</strong> ${escapeHtml(error.message)}
+                    </div>
+                `;
+                document.getElementById('result').classList.add('show');
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+                document.getElementById('submitUrlBtn').disabled = false;
+            }
+        }
+
+        function displayResult(result) {
+            updateStep(4);
+
+            let html = '';
+
+            if (result.step1_analysis) {
+                html += '<div class="success"><strong>✓ Анализ завершен</strong></div>';
+            }
+
+            if (result.step2_prompt) {
+                html += `
+                    <h3>Сгенерированный промпт:</h3>
+                    <div class="prompt-box">${escapeHtml(result.step2_prompt)}</div>
+                    <button class="btn" onclick="copyPrompt()">📋 Копировать промпт</button>
+                `;
+                window.currentPrompt = result.step2_prompt;
+            }
+
+            if (result.step3_video_generation) {
+                const videoGen = result.step3_video_generation;
+                const providerLabel = videoGen.provider ? escapeHtml(videoGen.provider) : 'unknown';
+                const statusLabel = videoGen.status ? escapeHtml(videoGen.status) : '—';
+
+                html += `
+                    <div class="info-box">
+                        <strong>Поставщик:</strong> ${providerLabel} &nbsp;|&nbsp; <strong>Статус:</strong> ${statusLabel}
+                    </div>
+                `;
+
+                if (Array.isArray(videoGen.notes) && videoGen.notes.length) {
+                    html += `
+                        <div class="info-box">
+                            ${videoGen.notes.map(note => escapeHtml(note)).join('<br>')}
+                        </div>
+                    `;
+                }
+
+                if (videoGen.status === 'processing') {
+                    html += `
+                        <div class="success">
+                            <strong>✓ Видео генерируется...</strong><br>
+                            Task ID: ${videoGen.task_id}<br>
+                            Статус будет проверяться автоматически
+                        </div>
+                    `;
+                    currentTaskId = videoGen.task_id;
+                    currentProvider = videoGen.provider || 'google';
+                    startStatusCheck();
+                } else if (videoGen.status === 'submitted') {
+                    html += `
+                        <div class="success">
+                            <strong>✓ Задача отправлена в Kie.ai</strong><br>
+                            Task ID: ${escapeHtml(videoGen.task_id || '—')}<br>
+                            Статус будет проверяться автоматически
+                        </div>
+                    `;
+                    currentTaskId = videoGen.task_id;
+                    currentProvider = 'kie.ai';
+                    startStatusCheck();
+                } else if (videoGen.video_url) {
+                    html += `
+                        <div class="success"><strong>✓ Видео готово!</strong></div>
+                        <div class="video-result">
+                            <video controls style="max-width: 100%; border-radius: 8px; margin: 20px 0;">
+                                <source src="${videoGen.video_url}" type="video/mp4">
+                                Ваш браузер не поддерживает video tag.
+                            </video>
+                            <br>
+                            <a href="${videoGen.video_url}" download class="btn">💾 Скачать видео</a>
+                            <button class="btn" onclick="navigator.clipboard.writeText('${videoGen.video_url}').then(() => alert('Ссылка скопирована!'))">🔗 Копировать ссылку</button>
+                        </div>
+                    `;
+                } else if (videoGen.status === 'failed' || videoGen.error) {
+                    html += `
+                        <div class="error">
+                            <strong>⚠ Генерация видео недоступна:</strong><br>
+                            ${escapeHtml(videoGen.error || videoGen.message || 'Ошибка без описания')}<br><br>
+                            <strong>Что делать:</strong><br>
+                            1. Скопируйте промпт выше (кнопка "📋 Копировать промпт")<br>
+                            2. Откройте <a href="https://aistudio.google.com" target="_blank" style="color: #4285f4;">Google AI Studio</a> или <a href="https://app.kie.ai" target="_blank" style="color: #4285f4;">панель Kie.ai</a><br>
+                            3. Вставьте промпт и загрузите изображения вручную
+                        </div>
+                    `;
+                }
+
+                if (Array.isArray(result.generation_attempts) && result.generation_attempts.length) {
+                    html += `
+                        <div class="attempts-box">
+${escapeHtml(JSON.stringify(result.generation_attempts, null, 2))}
+                        </div>
+                    `;
+                }
+            }
+
+            document.getElementById('resultContent').innerHTML = html;
+            document.getElementById('result').classList.add('show');
+        }
+
+        function startStatusCheck() {
+            if (!currentTaskId) return;
+
+            const checkInterval = currentProvider === 'kie.ai' ? 10000 : 5000; // Kie.ai проверяем реже
+
+            statusCheckInterval = setInterval(async () => {
+                try {
+                    let statusUrl;
+                    if (currentProvider === 'kie.ai') {
+                        statusUrl = `http://localhost:8000/veo31/kie-status/${currentTaskId}`;
+                    } else {
+                        statusUrl = `http://localhost:8000/veo31/status/${currentTaskId}`;
+                    }
+
+                    const response = await fetch(statusUrl);
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const status = await response.json();
+
+                    // Обработка для Google Veo
+                    if (currentProvider === 'google' || !currentProvider) {
+                        if (status.status === 'completed' && status.video_url) {
+                            clearInterval(statusCheckInterval);
+                            updateLoadingText('Видео готово!');
+                            document.getElementById('resultContent').innerHTML += `
+                                <div class="success"><strong>✓ Видео готово!</strong></div>
+                                <div class="video-result">
+                                    <video controls>
+                                        <source src="${status.video_url}" type="video/mp4">
+                                    </video>
+                                    <br>
+                                    <a href="${status.video_url}" download class="btn">💾 Скачать видео</a>
+                                    <button class="btn" onclick="navigator.clipboard.writeText('${status.video_url}').then(() => alert('Ссылка скопирована!'))">🔗 Копировать ссылку</button>
+                                </div>
+                            `;
+                        } else if (status.status === 'failed') {
+                            clearInterval(statusCheckInterval);
+                            updateLoadingText('Ошибка генерации');
+                        }
+                    }
+                    // Обработка для Kie.ai
+                    else if (currentProvider === 'kie.ai') {
+                        // Проверяем video_url в разных местах ответа (из обновленного API)
+                        const videoUrl = status.video_url ||
+                                       status.result?.video_url ||
+                                       status.raw_response?.result?.video_url ||
+                                       status.raw_response?.video_url ||
+                                       status.result?.videoUrl ||
+                                       status.raw_response?.data?.video_url;
+
+                        const kieStatus = status.status || status.code || (status.raw_response && status.raw_response.status);
+
+                        // Если endpoint не найден, показываем сообщение
+                        if (kieStatus === 'unknown' || status.message?.includes('endpoint not found')) {
+                            // Не останавливаем проверку, но показываем информацию
+                            updateLoadingText('Проверка статуса (проверьте вручную в панели Kie.ai)...');
+                            if (!document.getElementById('kie-manual-check')) {
+                                document.getElementById('resultContent').innerHTML += `
+                                    <div class="info-box" id="kie-manual-check">
+                                        <strong>ℹ️ Автоматическая проверка статуса недоступна</strong><br>
+                                        Task ID: <code>${escapeHtml(currentTaskId)}</code><br>
+                                        <a href="https://app.kie.ai" target="_blank" style="color: #4285f4; font-weight: bold;">Проверьте статус вручную в панели Kie.ai</a><br>
+                                        <small>Статус будет проверяться периодически...</small>
+                                    </div>
+                                `;
+                            }
+                        }
+                        // Если видео готово (статус completed и есть video_url)
+                        else if ((kieStatus === 'completed' || kieStatus === 'success' || kieStatus === 200) && videoUrl) {
+                            clearInterval(statusCheckInterval);
+                            updateLoadingText('Видео готово!');
+
+                            // Удаляем сообщение о ручной проверке если оно было
+                            const manualCheckEl = document.getElementById('kie-manual-check');
+                            if (manualCheckEl) {
+                                manualCheckEl.remove();
+                            }
+
+                            document.getElementById('resultContent').innerHTML += `
+                                <div class="success"><strong>✓ Видео готово!</strong></div>
+                                <div class="video-result">
+                                    <video controls style="max-width: 100%; border-radius: 8px;">
+                                        <source src="${escapeHtml(videoUrl)}" type="video/mp4">
+                                        Ваш браузер не поддерживает видео.
+                                    </video>
+                                    <br><br>
+                                    <a href="${escapeHtml(videoUrl)}" download class="btn" style="margin-right: 10px;">💾 Скачать видео</a>
+                                    <button class="btn" onclick="navigator.clipboard.writeText('${escapeHtml(videoUrl)}').then(() => alert('Ссылка скопирована в буфер обмена!'))">🔗 Копировать ссылку</button>
+                                </div>
+                            `;
+                            document.getElementById('result').classList.add('show');
+                        }
+                        // Если статус показывает что обработка еще идет
+                        else if (kieStatus === 'processing' || kieStatus === 'pending' || kieStatus === 'in_progress' || (!kieStatus && !videoUrl)) {
+                            updateLoadingText(`Генерация видео... (${kieStatus || 'в процессе'})`);
+                        }
+                        // Если ошибка
+                        else if (kieStatus === 'failed' || kieStatus === 'error') {
+                            clearInterval(statusCheckInterval);
+                            updateLoadingText('Ошибка генерации');
+                            const errorMsg = status.error || status.message || status.raw_response?.error || 'Неизвестная ошибка';
+                            document.getElementById('resultContent').innerHTML += `
+                                <div class="error">
+                                    <strong>⚠ Ошибка генерации:</strong><br>
+                                    ${escapeHtml(errorMsg)}<br><br>
+                                    <a href="https://app.kie.ai" target="_blank" style="color: #4285f4;">Проверьте статус в панели Kie.ai</a>
+                                </div>
+                            `;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Ошибка проверки статуса:', error);
+                }
+            }, checkInterval);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function copyPrompt() {
+            const promptToCopy = document.getElementById('editablePrompt')?.value || window.currentPrompt || '';
+            if (promptToCopy) {
+                navigator.clipboard.writeText(promptToCopy).then(() => {
+                    alert('Промпт скопирован!');
+                }).catch(err => {
+                    console.error('Ошибка копирования:', err);
+                    alert('Не удалось скопировать промпт');
+                });
+            } else {
+                alert('Нет промпта для копирования');
+            }
+        }
+
+        // Проверка доступности сервера
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch('http://localhost:8000/');
+                if (!response.ok) throw new Error();
+            } catch (error) {
+                document.getElementById('resultContent').innerHTML = `
+                    <div class="error">
+                        <strong>⚠ Сервер не запущен!</strong><br>
+                        Запустите сервер через start_server.bat
+                    </div>
+                `;
+                document.getElementById('result').classList.add('show');
+            }
+        });
+    </script>
+</body>
+</html>
+

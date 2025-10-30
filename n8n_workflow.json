@@ -1,0 +1,193 @@
+{
+  "name": "Video Prompt Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "video-prompt",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "video-prompt-pipeline"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.body.video_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "download-media",
+      "name": "Download Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "binaryData": true,
+        "fileName": "={{ $json.url.split('/').pop() }}"
+      },
+      "id": "prepare-media",
+      "name": "Prepare Media",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "maxTokens": 2000,
+          "temperature": 0.3
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "=Analyze this image/video in extreme detail as a professional jewelry photographer. Extract: main objects, materials, lighting, camera work, composition, background, motion dynamics, style. Output as JSON with fields: main_objects, materials, lighting, camera_work, composition, background_surfaces, motion_dynamics, style_mood."
+            }
+          ]
+        },
+        "attachments": [
+          {
+            "type": "image",
+            "property": "data"
+          }
+        ]
+      },
+      "id": "agent1-analyze",
+      "name": "Agent 1: Visual Analyzer",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-api-key",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "maxTokens": 1000,
+          "temperature": 0.7
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "=You are an expert prompt engineer for AI video generators (Veo 3, Sora 2). Convert scene descriptions into optimized prompts. Platform: {{ $json.body.platform || 'veo3' }}. Use case: {{ $json.body.use_case || 'general' }}."
+            },
+            {
+              "role": "user",
+              "content": "=Create an optimized prompt for {{ $json.body.platform || 'veo3' }} based on this scene analysis:\n\n{{ $json.content }}"
+            }
+          ]
+        }
+      },
+      "id": "agent2-generate",
+      "name": "Agent 2: Prompt Generator",
+      "type": "@n8n/n8n-langchain.openAi",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-api-key",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"prompt\": $json.content, \"platform\": $('Webhook Trigger').item.json.body.platform, \"use_case\": $('Webhook Trigger').item.json.body.use_case } }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Media": {
+      "main": [
+        [
+          {
+            "node": "Prepare Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Media": {
+      "main": [
+        [
+          {
+            "node": "Agent 1: Visual Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 1: Visual Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Agent 2: Prompt Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 2: Prompt Generator": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+

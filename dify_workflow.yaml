@@ -1,0 +1,163 @@
+version: "1.0.0"
+kind: workflow
+graph:
+  edges:
+    - id: start-to-download
+      source: start
+      target: download-node
+    - id: download-to-analyze
+      source: download-node
+      target: analyze-node
+    - id: analyze-to-generate
+      source: analyze-node
+      target: generate-node
+    - id: generate-to-answer
+      source: generate-node
+      target: answer
+  nodes:
+    - id: start
+      type: start
+      data:
+        title: Start
+        variables:
+          - variable: video_url
+            label: Video/Image URL
+            type: text-input
+            required: true
+          - variable: platform
+            label: Platform
+            type: select
+            options:
+              - veo3
+              - sora2
+              - seedream
+            required: true
+            default: veo3
+          - variable: use_case
+            label: Use Case
+            type: select
+            options:
+              - product_video
+              - hero_image
+              - gemstone_closeup
+              - luxury_brand
+              - general
+            required: true
+            default: general
+
+    - id: download-node
+      type: http-request
+      data:
+        title: Download Media
+        method: GET
+        url: "{{#start.video_url#}}"
+        headers: {}
+        body: {}
+        timeout: 30
+
+    - id: analyze-node
+      type: llm
+      data:
+        title: Agent 1: Visual Analyzer
+        model:
+          provider: openai
+          name: gpt-4o
+          mode: chat
+          completion_params:
+            temperature: 0.3
+            max_tokens: 2000
+        prompt_template:
+          - role: system
+            text: |
+              You are a professional jewelry photographer and videographer analyzer.
+              Analyze the provided media in extreme detail.
+            files:
+              - "{{#download-node.response#}}"
+          - role: user
+            text: |
+              Analyze this image/video in extreme detail. Extract and describe:
+
+              1. Main objects: What are the primary subjects? (jewelry pieces, gemstones, settings)
+              2. Materials: Metal types (gold, platinum, silver), gemstone types and cuts
+              3. Lighting: Direction, softness/hardness, color temperature
+              4. Camera work: Movement type, framing, depth of field
+              5. Composition: Rule of thirds, symmetry, negative space
+              6. Background and surfaces: Colors, textures, reflections
+              7. Motion and dynamics: Movement speed, transitions, effects, animations
+              8. Style and mood: Overall aesthetic
+
+              Output as structured JSON with these exact fields:
+              {
+                "main_objects": [],
+                "materials": {},
+                "lighting": {},
+                "camera_work": {},
+                "composition": {},
+                "background_surfaces": {},
+                "motion_dynamics": {},
+                "style_mood": {}
+              }
+
+    - id: generate-node
+      type: llm
+      data:
+        title: Agent 2: Prompt Generator
+        model:
+          provider: openai
+          name: gpt-4o
+          mode: chat
+          completion_params:
+            temperature: 0.7
+            max_tokens: 1000
+        prompt_template:
+          - role: system
+            text: |
+              You are an expert prompt engineer for AI video generators (Veo 3, Sora 2, Seedream).
+
+              Platform: {{#start.platform#}}
+              Use case: {{#start.use_case#}}
+
+              Rules for {{#start.platform#}}:
+              {% if start.platform == 'veo3' %}
+              - Start with main object and action
+              - Include camera movement (rotation, pan, dolly)
+              - Specify lighting (studio, natural, dramatic)
+              - Add surface properties (glossy, matte, reflective)
+              - Use cinematic terms (depth of field, bokeh)
+              {% elif start.platform == 'sora2' %}
+              - Focus on temporal coherence
+              - Emphasize motion dynamics
+              - Include duration hints
+              - Specify style references
+              {% else %}
+              - Be detailed with technical terms
+              - Include composition description
+              - Specify lighting and camera characteristics
+              {% endif %}
+
+              Important:
+              - Prompt must be in English
+              - Use professional photography/cinematography terminology
+              - Be specific and detailed
+              - Include all important visual elements
+              - Ready to copy and use
+          - role: user
+            text: |
+              Create an optimized prompt based on this scene analysis:
+
+              {{#analyze-node.text#}}
+
+              Platform: {{#start.platform#}}
+              Use case: {{#start.use_case#}}
+
+              Return ONLY the final prompt, no explanations.
+
+    - id: answer
+      type: answer
+      data:
+        title: Answer
+        answer: "{{#generate-node.text#}}"
+        metadata:
+          platform: "{{#start.platform#}}"
+          use_case: "{{#start.use_case#}}"
+
