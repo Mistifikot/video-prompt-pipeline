@@ -1,16 +1,17 @@
 """
-Агент 2: Графический промт-инженер
-Преобразует структурированное описание сцены в оптимизированный промт для Sora 2 / Veo 3
+Agent 2: Visual prompt engineer
+Converts structured scene description into optimized prompt for Sora 2 / Veo 3
 """
 
 import os
 import json
+import time
 from typing import Dict, Optional
 import requests
 
 
 class PromptGenerator:
-    """Генератор промптов для AI-видео платформ"""
+    """Prompt generator for AI video platforms"""
 
     def __init__(
         self,
@@ -19,7 +20,7 @@ class PromptGenerator:
         auto_polish: Optional[bool] = None
     ):
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        self.model = "gpt-4o"  # Или gpt-4-turbo
+        self.model = "gpt-4o"  # Or gpt-4-turbo
         self.perplexity_api_key = perplexity_api_key or os.getenv("PPLX_API_KEY")
         self.perplexity_model = os.getenv("PPLX_MODEL", "sonic")
         if auto_polish is None:
@@ -30,7 +31,7 @@ class PromptGenerator:
                 auto_polish = bool(self.perplexity_api_key)
         self.auto_polish = auto_polish and bool(self.perplexity_api_key)
 
-        # Шаблоны и гайдлайны для каждой платформы
+        # Templates and guidelines for each platform
         self.platform_guides = {
             "veo3": {
                 "name": "Google Veo 3.1",
@@ -102,98 +103,98 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
             "sora2": {
                 "name": "OpenAI Sora 2",
                 "guide": """
-Для Sora 2 промты должны:
-- Фокусироваться на временной связности (temporal coherence)
-- Подчеркивать динамику движения
-- Включать указания на длительность (если нужно)
-- Описывать стиль и эстетику
-- Использовать описания анимации и переходов
-- Для драгоценностей: акцент на плавность движения, блики, ротация
+For Sora 2 prompts should:
+- Focus on temporal coherence
+- Emphasize motion dynamics
+- Include duration hints (if needed)
+- Describe style and aesthetics
+- Use animation and transition descriptions
+- For jewelry: emphasis on smooth motion, highlights, rotation
                 """,
                 "example_prefix": "Cinematic jewelry showcase: "
             },
             "seedream": {
                 "name": "Seedream",
                 "guide": """
-Для Seedream промты должны:
-- Быть детализированными с техническими терминами
-- Включать описание композиции
-- Указывать характеристики освещения и камеры
-- Описывать движения и эффекты
+For Seedream prompts should:
+- Be detailed with technical terms
+- Include composition description
+- Specify lighting and camera characteristics
+- Describe movements and effects
                 """,
                 "example_prefix": "Luxury jewelry visual: "
             }
         }
 
     def _build_system_prompt(self, platform: str, use_case: str = "general") -> str:
-        """Строит системный промпт для генерации"""
+        """Builds system prompt for generation"""
         platform_info = self.platform_guides.get(platform, self.platform_guides["veo3"])
 
         use_case_instructions = {
-            "product_video": "Создай промт для product video (15-30 секунд) с акцентом на демонстрацию продукта",
-            "hero_image": "Создай промт для hero/key visual изображения с драматическим освещением",
-            "gemstone_closeup": "Создай промт для крупного плана драгоценного камня с максимальной детализацией",
-            "luxury_brand": "Создай промт в стиле luxury брендов (Tiffany, Chaumet) с элегантным освещением",
-            "general": "Создай качественный промт на основе описания"
+            "product_video": "Create prompt for product video (15-30 seconds) with emphasis on product demonstration",
+            "hero_image": "Create prompt for hero/key visual image with dramatic lighting",
+            "gemstone_closeup": "Create prompt for close-up of gemstone with maximum detail",
+            "luxury_brand": "Create prompt in luxury brand style (Tiffany, Chaumet) with elegant lighting",
+            "general": "Create quality prompt based on description"
         }
 
         instruction = use_case_instructions.get(use_case, use_case_instructions["general"])
 
-        # Для Veo 3.1 добавляем строгие требования к формату
+        # For Veo 3.1 add strict format requirements
         veo31_critical = ""
         if platform == "veo3":
             veo31_critical = """
 
-КРИТИЧЕСКИ ВАЖНО для Veo 3.1:
-- Промт ДОЛЖЕН быть ДЕТАЛЬНЫМ и ИСЧЕРПЫВАЮЩИМ (минимум 300-500 слов, можно больше до 800-1000 слов)
-- Используй ВСЕ данные из анализа:
-  * Если есть subjects - используй subjects вместо main_objects (каждый объект с name, class, materials, dominant_colors_hex)
-  * Если есть camera_motion.keyframes - ОБЯЗАТЕЛЬНО детально опиши движение камеры из camera_motion.keyframes (каждый keyframe с временем, типом движения, позицией, easing)
-  * Если есть camera_motion.support - укажи тип поддержки камеры (tripod, handheld, steadicam, gimbal, dolly, crane, drone)
-  * Если есть lighting.lights - опиши КАЖДЫЙ источник света с ролью, позицией, цветовой температурой, интенсивностью
-  * Если есть lighting.environment - опиши окружение
-  * Если есть optics - используй все данные о фокусном расстоянии, диафрагме, фокусе, distortion, vignetting
-  * Если есть composition - используй shot_size, framing, depth_of_field, bokeh_notes
-  * Если есть color_and_post - используй white_balance_K, look, grain_noise, halation_bloom, sharpness
-  * Если есть media - используй fps, duration_s, aspect_ratio
-- Используй ТОЛЬКО английский язык
-- Структура: [Subject] [action]. [Camera movement] [speed/easing]. [Shot size]. [Lighting with positions/color temp]. [Depth of field/focus]. [Composition]. [Materials/textures]. [Style]
-- Для видео-референса: ОБЯЗАТЕЛЬНО детально опиши движение камеры из camera_motion.keyframes (каждый keyframe с временем, типом движения, позицией, easing)
-- Техническая точность важнее художественных описаний
-- Используй точные термины для движения камеры (pan, tilt, dolly, truck, etc.)
-- Указывай цветовую температуру в Кельвинах (например: 3200K warm, 5600K daylight)
-- Указывай параметры объектива (f/2.8, f/4, f/11, focal length 85mm, etc.)
-- НЕ сокращай и НЕ упрощай - Veo 3.1 требует максимальной детализации для лучшего результата
+CRITICALLY IMPORTANT for Veo 3.1:
+- Prompt MUST be DETAILED and COMPREHENSIVE (minimum 300-500 words, can be more up to 800-1000 words)
+- Use ALL data from analysis:
+  * If subjects exist - use subjects instead of main_objects (each object with name, class, materials, dominant_colors_hex)
+  * If camera_motion.keyframes exist - MUST describe camera movement from camera_motion.keyframes in detail (each keyframe with time, movement type, position, easing)
+  * If camera_motion.support exists - specify camera support type (tripod, handheld, steadicam, gimbal, dolly, crane, drone)
+  * If lighting.lights exist - describe EACH light source with role, position, color temperature, intensity
+  * If lighting.environment exists - describe environment
+  * If optics exist - use all data about focal length, aperture, focus, distortion, vignetting
+  * If composition exists - use shot_size, framing, depth_of_field, bokeh_notes
+  * If color_and_post exists - use white_balance_K, look, grain_noise, halation_bloom, sharpness
+  * If media exists - use fps, duration_s, aspect_ratio
+- Use ONLY English language
+- Structure: [Subject] [action]. [Camera movement] [speed/easing]. [Shot size]. [Lighting with positions/color temp]. [Depth of field/focus]. [Composition]. [Materials/textures]. [Style]
+- For video reference: MUST describe camera movement from camera_motion.keyframes in detail (each keyframe with time, movement type, position, easing)
+- Technical precision is more important than artistic descriptions
+- Use precise terms for camera movement (pan, tilt, dolly, truck, etc.)
+- Specify color temperature in Kelvin (e.g.: 3200K warm, 5600K daylight)
+- Specify lens parameters (f/2.8, f/4, f/11, focal length 85mm, etc.)
+- DO NOT shorten or simplify - Veo 3.1 requires maximum detail for best results
 """
 
-        system_prompt = f"""Ты эксперт по промт-инженерству для AI-видео генераторов.
+        system_prompt = f"""You are an expert in prompt engineering for AI video generators.
 
-Твоя задача: преобразовать детальное описание визуальной сцены в оптимизированный промт для {platform_info['name']}.
+Your task: convert detailed visual scene description into optimized prompt for {platform_info['name']}.
 
 {platform_info['guide']}
 
 {instruction}
 {veo31_critical}
 
-Важные правила:
-- Промт должен быть на английском языке (стандарт для AI-видео)
-- Используй профессиональную терминологию фотографии и кинематографии
-- Будь КРАЙНЕ конкретным и ДЕТАЛИЗИРОВАННЫМ - используй ВСЕ данные из анализа
-- Включи все важные визуальные элементы из описания
-- Для драгоценностей: акцент на materials, lighting, reflections, camera movement
-- Промт должен быть готов к копированию и использованию
-- ДЛЯ Veo 3.1: промт должен быть ДОЛГИМ и ДЕТАЛЬНЫМ (минимум 300-500 слов, можно больше)
-- НЕ сокращай технические детали - включай все спецификации из анализа
+Important rules:
+- Prompt must be in English (standard for AI video)
+- Use professional photography and cinematography terminology
+- Be EXTREMELY specific and DETAILED - use ALL data from analysis
+- Include all important visual elements from description
+- For jewelry: emphasis on materials, lighting, reflections, camera movement
+- Prompt must be ready to copy and use
+- FOR Veo 3.1: prompt must be LONG and DETAILED (minimum 300-500 words, can be more)
+- DO NOT shorten technical details - include all specifications from analysis
 
-Формат ответа:
-Верни ТОЛЬКО финальный промт, без дополнительных объяснений или метаданных.
-Промт должен быть ПОЛНЫМ и ДЕТАЛЬНЫМ, используя ВСЕ данные из анализа."""
+Response format:
+Return ONLY the final prompt, without additional explanations or metadata.
+Prompt must be COMPLETE and DETAILED, using ALL data from analysis."""
 
         return system_prompt
 
     @staticmethod
     def _scene_description_to_json(scene_description: Dict) -> str:
-        """Безопасное преобразование описания сцены в JSON строку."""
+        """Safe conversion of scene description to JSON string."""
 
         def default_serializer(value):
             if isinstance(value, (set, tuple)):
@@ -210,14 +211,14 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
         )
 
     def _generate_with_openai(self, scene_description: Dict, platform: str, use_case: str) -> str:
-        """Генерирует промт через OpenAI"""
+        """Generates prompt via OpenAI"""
         if not self.openai_api_key:
-            raise ValueError("OpenAI API key не найден")
+            raise ValueError("OpenAI API key not found")
 
         system_prompt = self._build_system_prompt(platform, use_case)
 
-        # Формируем пользовательский промпт
-        # Проверяем наличие детальной схемы анализа (новая версия)
+        # Build user prompt
+        # Check for detailed analysis schema (new version)
         has_detailed_schema = bool(
             scene_description.get("subjects") or
             scene_description.get("camera_motion") or
@@ -225,7 +226,7 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
             scene_description.get("optics")
         )
 
-        # Проверяем наличие старой схемы (для обратной совместимости)
+        # Check for old schema (for backward compatibility)
         has_old_schema = bool(
             scene_description.get("main_objects") or
             scene_description.get("camera_work")
@@ -237,19 +238,19 @@ GOOD: "Platinum engagement ring rotating clockwise on a pedestal. Slow dolly pus
         prompt_instructions = ""
         if has_image_references and has_video_reference:
             prompt_instructions = """
-ВАЖНО: У тебя есть два источника информации:
-1. ИЗОБРАЖЕНИЯ (reference images): Используй из них объекты, материалы, композицию, статичные элементы
-2. ВИДЕО-РЕФЕРЕНС (video reference): Используй из него движение камеры, подачу, динамику сцены, ритм
+IMPORTANT: You have two sources of information:
+1. IMAGES (reference images): Use objects, materials, composition, static elements from them
+2. VIDEO REFERENCE: Use camera movement, presentation, scene dynamics, rhythm from it
 
-Объедини их так: объекты из изображений + движение и камера из видео.
+Combine them like this: objects from images + movement and camera from video.
 """
         elif has_video_reference:
             prompt_instructions = """
-ВАЖНО: Используй видео-референс для движения камеры, подачи, динамики сцены.
+IMPORTANT: Use video reference for camera movement, presentation, scene dynamics.
 """
         elif has_image_references:
             prompt_instructions = """
-ВАЖНО: Используй референсные изображения для объектов, материалов, композиции.
+IMPORTANT: Use reference images for objects, materials, composition.
 """
 
         workflow_context = scene_description.get("workflow_context")
@@ -266,49 +267,49 @@ CRITICAL WORKFLOW INSTRUCTION:
             workflow_notes = workflow_context.get("instructions")
             if isinstance(workflow_notes, dict) and workflow_notes:
                 serialized_notes = json.dumps(workflow_notes, ensure_ascii=False, indent=2)
-                prompt_instructions += f"\nДополнительные инструкции объединения (JSON):\n{serialized_notes}\n"
+                prompt_instructions += f"\nAdditional merge instructions (JSON):\n{serialized_notes}\n"
 
-        # Для Veo 3.1 добавляем специальные инструкции по детализации
+        # For Veo 3.1 add special detail instructions
         detail_instructions = ""
         if platform == "veo3":
             detail_instructions = """
 
-КРИТИЧЕСКИ ВАЖНО - ДЕТАЛИЗАЦИЯ ДЛЯ Veo 3.1:
-- Промт должен быть ОЧЕНЬ ДЕТАЛЬНЫМ (минимум 300-500 слов, можно больше)
-- ВАЖНО: Veo требует временную динамику - ВСЕГДА добавляй микродвижения объекта:
-  * Проверь subject_motion_detected или camera_motion.subject_motion или metadata.auto_video_insights.auto_motion.subject_motion
-  * Если есть движение объекта - опиши его детально (вращение, покачивание, и т.д.)
-  * Если движения нет - ВСЕ РАВНО добавь микродвижения: "gently sway", "sparkle glints travel", "micro-reflections dance"
-  * НИКОГДА не создавай статичный кадр - объект должен иметь хотя бы минимальное движение
-- Используй ВСЕ данные из анализа, особенно:
-  * subjects - опиши каждый объект (name, class, materials, colors)
-  * camera_motion.keyframes - опиши каждый keyframe с временем (t_s), типом движения (type), позицией (position_m), поворотом (rotation_euler_deg), easing, duration
-  * camera_motion.support - тип поддержки камеры (tripod, handheld, steadicam, gimbal, dolly, crane, drone)
-  * camera_motion.dominant_motion - если "static_camera_subject_rotation", обязательно опиши движение объекта
-  * lighting.lights - опиши КАЖДЫЙ источник света с ролью (role), позицией (position_m), дистанцией (distance_m), размером (size_m), модификатором (modifier), мягкостью (softness), интенсивностью (intensity_rel), цветовой температурой (color_temp_K), углом (angle_deg)
-  * lighting.environment - опиши окружение (type, time_of_day, weather, reflections)
-  * optics - используй ВСЕ данные: focal_length_mm, fov_deg, aperture_T, focus_distance_m, focus_pulls, distortion, vignetting, chromatic_aberration
-  * composition - опиши композицию: shot_size (ECU/CU/MCU/MS/MLS/WS/EWS), framing (rule_of_thirds, symmetry, leading_lines, negative_space), depth_of_field, bokeh_notes
-  * color_and_post - опиши цветокоррекцию: white_balance_K, look (contrast, saturation, hue shifts), grain_noise, halation_bloom, sharpness
-  * media - используй fps, duration_s, aspect_ratio (если 1:1, используй 16:9), resolution_px
-- Если есть видео-референс с camera_motion.keyframes, ОБЯЗАТЕЛЬНО включи детальное описание движения камеры ВО ВРЕМЕНИ - каждый keyframe должен быть описан отдельно с указанием того, что происходит в этот момент времени
-- НЕ сокращай технические детали - Veo 3.1 требует максимальной специфичности
-- Каждое движение камеры должно быть описано с указанием типа (pan/tilt/dolly/truck/pedestal/crane/arc/roll/zoom), направления, скорости, easing (linear/easeIn/easeOut/easeInOut)
-- Каждый источник света должен быть описан с позицией относительно объекта/камеры, цветовой температурой в Кельвинах, интенсивностью
-- Используй точные технические термины: например "85mm focal length at f/2.8", "shallow depth of field", "3200K warm key light from top-left at 45 degrees"
+CRITICALLY IMPORTANT - DETAILING FOR Veo 3.1:
+- Prompt MUST be VERY DETAILED (minimum 300-500 words, can be more)
+- IMPORTANT: Veo requires temporal dynamics - ALWAYS add object micro-movements:
+  * Check subject_motion_detected or camera_motion.subject_motion or metadata.auto_video_insights.auto_motion.subject_motion
+  * If object movement exists - describe it in detail (rotation, swaying, etc.)
+  * If no movement - STILL add micro-movements: "gently sway", "sparkle glints travel", "micro-reflections dance"
+  * NEVER create a static frame - object must have at least minimal movement
+- Use ALL data from analysis, especially:
+  * subjects - describe each object (name, class, materials, colors)
+  * camera_motion.keyframes - describe each keyframe with time (t_s), movement type (type), position (position_m), rotation (rotation_euler_deg), easing, duration
+  * camera_motion.support - camera support type (tripod, handheld, steadicam, gimbal, dolly, crane, drone)
+  * camera_motion.dominant_motion - if "static_camera_subject_rotation", must describe object movement
+  * lighting.lights - describe EACH light source with role, position (position_m), distance (distance_m), size (size_m), modifier, softness, intensity (intensity_rel), color temperature (color_temp_K), angle (angle_deg)
+  * lighting.environment - describe environment (type, time_of_day, weather, reflections)
+  * optics - use ALL data: focal_length_mm, fov_deg, aperture_T, focus_distance_m, focus_pulls, distortion, vignetting, chromatic_aberration
+  * composition - describe composition: shot_size (ECU/CU/MCU/MS/MLS/WS/EWS), framing (rule_of_thirds, symmetry, leading_lines, negative_space), depth_of_field, bokeh_notes
+  * color_and_post - describe color grading: white_balance_K, look (contrast, saturation, hue shifts), grain_noise, halation_bloom, sharpness
+  * media - use fps, duration_s, aspect_ratio (if 1:1, use 16:9), resolution_px
+- If video reference with camera_motion.keyframes exists, MUST include detailed camera movement description OVER TIME - each keyframe must be described separately with indication of what happens at that moment
+- DO NOT shorten technical details - Veo 3.1 requires maximum specificity
+- Each camera movement must be described with type (pan/tilt/dolly/truck/pedestal/crane/arc/roll/zoom), direction, speed, easing (linear/easeIn/easeOut/easeInOut)
+- Each light source must be described with position relative to object/camera, color temperature in Kelvin, intensity
+- Use precise technical terms: e.g. "85mm focal length at f/2.8", "shallow depth of field", "3200K warm key light from top-left at 45 degrees"
 """
 
-        user_prompt = f"""На основе этого детального описания сцены создай ОЧЕНЬ ДЕТАЛЬНЫЙ и ИСЧЕРПЫВАЮЩИЙ промт для {self.platform_guides[platform]['name']}:
+        user_prompt = f"""Based on this detailed scene description, create a VERY DETAILED and COMPREHENSIVE prompt for {self.platform_guides[platform]['name']}:
 {prompt_instructions}
 {detail_instructions}
 
-ВХОДНЫЕ ДАННЫЕ (используй ВСЕ это):
+INPUT DATA (use ALL of this):
 {self._scene_description_to_json(scene_description)}
 
-Платформа: {platform}
-Тип задачи: {use_case}
+Platform: {platform}
+Task type: {use_case}
 
-Создай максимально детальный и технически точный промт, используя ВСЕ доступные данные из анализа."""
+Create a maximally detailed and technically accurate prompt using ALL available data from analysis."""
 
         headers = {
             "Authorization": f"Bearer {self.openai_api_key}",
@@ -327,22 +328,59 @@ CRITICAL WORKFLOW INSTRUCTION:
                     "content": user_prompt
                 }
             ],
-            "max_tokens": 2000 if platform == "veo3" else 1000,  # Для Veo 3.1 нужны более длинные промпты
-            "temperature": 0.6  # Немного ниже для более точных технических деталей
+            "max_tokens": 2000 if platform == "veo3" else 1000,  # Veo 3.1 needs longer prompts
+            "temperature": 0.6  # Slightly lower for more accurate technical details
         }
 
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
-        response.raise_for_status()
+        # Retry logic for OpenAI API with exponential backoff
+        max_retries = 3
+        last_error = None
 
-        result = response.json()
-        generated_prompt = result['choices'][0]['message']['content'].strip()
+        for attempt in range(max_retries):
+            try:
+                # Add delay between retries (exponential backoff)
+                if attempt > 0:
+                    delay = min(2 ** attempt, 10)  # Max 10 seconds
+                    print(f"[INFO] Retrying OpenAI API request (attempt {attempt + 1}/{max_retries}) after {delay}s delay...")
+                    time.sleep(delay)
 
-        return generated_prompt
+                response = requests.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60
+                )
+                response.raise_for_status()
+
+                result = response.json()
+                generated_prompt = result['choices'][0]['message']['content'].strip()
+
+                return generated_prompt
+            except requests.exceptions.Timeout as e:
+                last_error = e
+                error_msg = f"OpenAI API timeout (attempt {attempt + 1}/{max_retries}): {str(e)}"
+                if attempt < max_retries - 1:
+                    print(f"[WARNING] {error_msg}, retrying...")
+                    continue
+                raise requests.exceptions.RequestException(f"Failed to generate prompt after {max_retries} attempts: {error_msg}")
+            except requests.exceptions.ConnectionError as e:
+                last_error = e
+                error_msg = f"OpenAI API connection error (attempt {attempt + 1}/{max_retries}): {str(e)}"
+                if attempt < max_retries - 1:
+                    print(f"[WARNING] {error_msg}, retrying...")
+                    continue
+                raise requests.exceptions.RequestException(f"Failed to generate prompt after {max_retries} attempts: {error_msg}")
+            except requests.exceptions.RequestException as e:
+                last_error = e
+                error_msg = f"OpenAI API request error (attempt {attempt + 1}/{max_retries}): {str(e)}"
+                if attempt < max_retries - 1:
+                    print(f"[WARNING] {error_msg}, retrying...")
+                    continue
+                raise
+
+        # If all attempts failed
+        if last_error:
+            raise requests.exceptions.RequestException(f"Failed to generate prompt after {max_retries} attempts: {str(last_error)}")
 
     def _polish_with_perplexity(
         self,
@@ -351,7 +389,7 @@ CRITICAL WORKFLOW INSTRUCTION:
         platform: str,
         use_case: str
     ) -> str:
-        """Делает финальный полиш через Perplexity."""
+        """Performs final polish via Perplexity."""
         if not self.perplexity_api_key:
             return draft_prompt
 
@@ -381,7 +419,7 @@ CRITICAL WORKFLOW INSTRUCTION:
                 {"role": "user", "content": user_prompt}
             ],
             "temperature": 0.2,
-            "max_tokens": 2000 if platform == "veo3" else 1500,  # Для Veo 3.1 нужны более длинные промпты
+            "max_tokens": 2000 if platform == "veo3" else 1500,  # Veo 3.1 needs longer prompts
         }
 
         try:
@@ -417,24 +455,24 @@ CRITICAL WORKFLOW INSTRUCTION:
         polish_with_perplexity: Optional[bool] = None
     ) -> Dict:
         """
-        Генерирует промт для указанной платформы
+        Generates prompt for specified platform
 
         Args:
-            scene_description: Структурированное описание сцены от Агента 1
+            scene_description: Structured scene description from Agent 1
             platform: veo3, sora2, seedream
             use_case: product_video, hero_image, gemstone_closeup, luxury_brand, general
 
         Returns:
-            Dict с промтом и метаданными
+            Dict with prompt and metadata
         """
         if platform not in self.platform_guides:
             platform = "veo3"  # Fallback
 
         generated_prompt = self._generate_with_openai(scene_description, platform, use_case)
 
-        # Если в описании есть raw_analysis (текст без структуры), используем его
+        # If description has raw_analysis (unstructured text), use it
         if "raw_analysis" in scene_description and len(scene_description) == 2:
-            # Оптимизируем генерацию для текстового ответа
+            # Optimize generation for text response
             scene_description_full = {
                 "description": scene_description.get("raw_analysis", ""),
                 "format": scene_description.get("format", "text")
@@ -472,7 +510,7 @@ CRITICAL WORKFLOW INSTRUCTION:
         use_case: str = "general",
         polish_with_perplexity: Optional[bool] = None
     ) -> Dict[str, Dict]:
-        """Генерирует промты для нескольких платформ одновременно"""
+        """Generates prompts for multiple platforms simultaneously"""
         if platforms is None:
             platforms = ["veo3", "sora2"]
 
@@ -489,10 +527,10 @@ CRITICAL WORKFLOW INSTRUCTION:
 
 
 if __name__ == "__main__":
-    # Тестовый пример
+    # Test example
     generator = PromptGenerator()
 
-    # Пример использования
+    # Usage example
     test_description = {
         "main_objects": ["platinum engagement ring with round brilliant diamond"],
         "materials": {

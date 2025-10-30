@@ -1,6 +1,6 @@
 """
-Агент 1: Визуальный смысловой анализатор
-Анализирует изображения/видео и извлекает детальное описание сцены
+Agent 1: Visual semantic analyzer
+Analyzes images/videos and extracts detailed scene description
 """
 
 import os
@@ -23,17 +23,17 @@ from PIL import Image
 
 
 class VisualAnalyzer:
-    """Анализатор визуального контента для извлечения структурированного описания сцены"""
+    """Visual content analyzer for extracting structured scene descriptions"""
 
     def __init__(self, openai_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
-        self.preferred_model = "gpt-4o"  # GPT-4o поддерживает vision и видео
+        self.preferred_model = "gpt-4o"  # GPT-4o supports vision and video
         self.logger = logging.getLogger(self.__class__.__name__)
         self._http = self._build_retry_session()
 
     def _build_retry_session(self) -> requests.Session:
-        """Создает requests.Session с повторными попытками для нестабильных сетей"""
+        """Creates requests.Session with retries for unstable networks"""
         retry = Retry(
             total=3,
             connect=3,
@@ -59,7 +59,7 @@ class VisualAnalyzer:
         raise_for_status: bool = True,
         **kwargs,
     ) -> requests.Response:
-        """Делает POST запрос с дополнительной экспоненциальной паузой между попытками"""
+        """Makes POST request with additional exponential backoff between attempts"""
         last_error: Optional[Exception] = None
         for attempt in range(1, max_attempts + 1):
             try:
@@ -76,13 +76,13 @@ class VisualAnalyzer:
                     raise
                 sleep_seconds = backoff_factor ** (attempt - 1)
                 time.sleep(sleep_seconds)
-        # Если сюда дошли — бросаем последнюю ошибку
+        # If we reached here, raise the last error
         if last_error:
             raise last_error
         raise RuntimeError("Unexpected empty retry loop state")
 
     def _get_analysis_prompt(self) -> str:
-        """Возвращает универсальный промпт для анализа медиа"""
+        """Returns universal prompt for media analysis"""
         return """
 ROLE
 
@@ -293,42 +293,47 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
 
     def _download_media(self, url: str, max_retries: int = 3) -> Tuple[bytes, str]:
         """
-        Скачивает медиа по URL и возвращает данные + MIME type
-        Использует заголовки браузера и retry логику для обхода блокировок
+        Downloads media from URL and returns data + MIME type
+        Uses browser headers and retry logic to bypass blocks
         """
         from urllib.parse import urlparse
 
-        # Формируем правильный Referer из домена URL
+        # Build correct Referer from URL domain
         parsed_url = urlparse(url)
         referer = f"{parsed_url.scheme}://{parsed_url.netloc}/"
 
-        # Разные User-Agent для попыток
+        # Different User-Agent for attempts
         user_agents = [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ]
 
-        # Retry логика с разными подходами (БЕЗ Sec-Fetch заголовков!)
+        # Retry logic with different approaches (WITHOUT Sec-Fetch headers!)
         last_error = None
         for attempt in range(max_retries):
             try:
-                # Пробуем разные наборы заголовков
+                # Add delay between retries (exponential backoff)
+                if attempt > 0:
+                    delay = min(2 ** attempt, 10)  # Max 10 seconds
+                    time.sleep(delay)
+
+                # Try different header sets
                 if attempt == 0:
-                    # Первая попытка: минимальные заголовки без Referer
+                    # First attempt: minimal headers without Referer
                     headers = {
                         'User-Agent': user_agents[0],
                         'Accept': '*/*'
                     }
                 elif attempt == 1:
-                    # Вторая попытка: с Referer
+                    # Second attempt: with Referer
                     headers = {
                         'User-Agent': user_agents[1],
                         'Accept': '*/*',
                         'Referer': referer
                     }
                 else:
-                    # Третья попытка: полный набор но без Sec-Fetch
+                    # Third attempt: full set but without Sec-Fetch
                     headers = {
                         'User-Agent': user_agents[2],
                         'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8,video/*,*/*;q=0.8',
@@ -341,26 +346,42 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                 response.raise_for_status()
                 content_type = response.headers.get('content-type', '')
                 return response.content, content_type
+            except requests.exceptions.Timeout as e:
+                last_error = e
+                error_msg = f"Connection timeout (attempt {attempt + 1}/{max_retries}): {str(e)}"
+                if attempt < max_retries - 1:
+                    print(f"[WARNING] {error_msg}, retrying...")
+                    continue
+                raise requests.exceptions.RequestException(f"Failed to download image after {max_retries} attempts: {error_msg}")
+            except requests.exceptions.ConnectionError as e:
+                last_error = e
+                error_msg = f"Connection error (attempt {attempt + 1}/{max_retries}): {str(e)}"
+                if attempt < max_retries - 1:
+                    print(f"[WARNING] {error_msg}, retrying...")
+                    continue
+                raise requests.exceptions.RequestException(f"Failed to download image after {max_retries} attempts: {error_msg}")
             except requests.exceptions.HTTPError as e:
                 last_error = e
                 if e.response.status_code == 403 and attempt < max_retries - 1:
-                    # Для 403 пробуем следующий подход
+                    # For 403 try next approach
                     continue
-                # Для других ошибок HTTP сразу пробрасываем
+                # For other HTTP errors immediately raise
                 if e.response.status_code != 403:
                     raise
             except requests.exceptions.RequestException as e:
                 last_error = e
+                error_msg = f"Request error (attempt {attempt + 1}/{max_retries}): {str(e)}"
                 if attempt < max_retries - 1:
+                    print(f"[WARNING] {error_msg}, retrying...")
                     continue
-                raise
+                raise requests.exceptions.RequestException(f"Failed to download image after {max_retries} attempts: {error_msg}")
 
-        # Если все попытки не удались, пробрасываем последнюю ошибку
+        # If all attempts failed, raise the last error
         if last_error:
-            raise last_error
+            raise requests.exceptions.RequestException(f"Failed to download image after {max_retries} attempts: {str(last_error)}")
 
     def _is_video(self, content_type: str, file_path: Optional[str] = None) -> bool:
-        """Определяет, является ли медиа видео"""
+        """Determines if media is video"""
         video_mimes = ['video/', 'application/x-mpegURL']
         video_extensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v']
         if content_type:
@@ -376,7 +397,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         return False
 
     def _resize_image(self, image: Image.Image, max_dim: int = 1280) -> Image.Image:
-        """Масштабирует изображение так, чтобы длинная сторона не превышала max_dim."""
+        """Scales image so that the longest side does not exceed max_dim."""
         if max(image.size) <= max_dim:
             return image
         resized = image.copy()
@@ -384,13 +405,13 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         return resized
 
     def _encode_image(self, image: Image.Image, quality: int = 85) -> Tuple[bytes, str]:
-        """Конвертирует изображение в JPEG и возвращает байты вместе с MIME типом."""
+        """Converts image to JPEG and returns bytes along with MIME type."""
         buffer = BytesIO()
         image.convert("RGB").save(buffer, format="JPEG", quality=quality)
         return buffer.getvalue(), "image/jpeg"
 
     def _prepare_image_bytes(self, image_bytes: bytes, max_dim: int = 1280) -> Tuple[bytes, str]:
-        """Готовит изображение для отправки в модель: ресайз и перекодирование."""
+        """Prepares image for sending to model: resize and re-encoding."""
         try:
             with Image.open(BytesIO(image_bytes)) as img:
                 processed = self._resize_image(img, max_dim=max_dim)
@@ -404,9 +425,9 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         video_data: bytes,
         max_frames: int = 8,
     ) -> Tuple[List[bytes], Dict[str, Any]]:
-        """Извлекает ключевые кадры и базовые метаданные из видео"""
+        """Extracts key frames and basic metadata from video"""
         try:
-            # Сохраняем временный файл
+            # Save temporary file
             import tempfile
             with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
                 tmp_file.write(video_data)
@@ -466,7 +487,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
 
             cap.release()
 
-            # Удаляем временный файл
+            # Delete temporary file
             try:
                 os.unlink(tmp_path)
             except:
@@ -496,7 +517,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             return extracted_frames, metadata
 
         except Exception as e:
-            self.logger.error(f"Ошибка извлечения кадров: {e}")
+            self.logger.error(f"Frame extraction error: {e}")
             return [], {}
 
     def _estimate_video_motion(
@@ -504,7 +525,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         gray_frames: List[np.ndarray],
         fps: Optional[float],
     ) -> Dict[str, Any]:
-        """Пытается оценить движение камеры и объекта на основе оптического потока"""
+        """Attempts to estimate camera and object motion based on optical flow"""
         if len(gray_frames) < 2:
             return {}
 
@@ -607,7 +628,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         return motion_summary
 
     def _format_video_insights(self, metadata: Dict[str, Any]) -> str:
-        """Формирует текстовый блок с объективными метриками видео для подсказки модели"""
+        """Formats text block with objective video metrics for model hinting"""
         if not metadata:
             return ""
 
@@ -663,18 +684,18 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         return "VIDEO STRUCTURAL INSIGHTS (objective measurements):\n" + "\n".join(lines)
 
     def _encode_media_to_base64(self, media_data: bytes) -> str:
-        """Кодирует медиа в base64"""
+        """Encodes media to base64"""
         return base64.b64encode(media_data).decode('utf-8')
 
     @staticmethod
     def _extract_json_from_text(analysis_text: str) -> Dict:
-        """Пытается извлечь JSON из ответа модели."""
+        """Attempts to extract JSON from model response."""
         if not analysis_text:
             return {"raw_analysis": "", "format": "empty_response"}
 
         import re
 
-        # Ищем блоки формата ```json ... ```
+        # Look for ```json ... ``` blocks
         code_block_pattern = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
         for match in code_block_pattern.findall(analysis_text):
             try:
@@ -697,18 +718,18 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         }
 
     def _analyze_with_openai(self, media_data: bytes, content_type: str, is_video: bool) -> Dict:
-        """Анализ через OpenAI GPT-4o (поддерживает изображения и видео)"""
+        """Analysis via OpenAI GPT-4o (supports images and video)"""
         if not self.openai_api_key:
-            raise ValueError("OpenAI API key не найден")
+            raise ValueError("OpenAI API key not found")
 
         analysis_prompt = self._get_analysis_prompt()
         video_metadata: Dict[str, Any] = {}
 
-        # Для видео извлекаем несколько кадров
+        # For video extract several frames
         if is_video:
             frames, video_metadata = self._extract_video_frames(media_data, max_frames=8)
             if not frames:
-                raise ValueError("Не удалось извлечь кадры из видео")
+                raise ValueError("Failed to extract frames from video")
 
             insights_block = self._format_video_insights(video_metadata)
             prompt_text = analysis_prompt
@@ -718,13 +739,13 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                     "Ensure the JSON camera_motion keyframes and transfer prompt strictly follow these measured cues."
                 )
 
-            # Анализируем несколько кадров для понимания динамики
+            # Analyze several frames to understand dynamics
             content_parts = [{
                 "type": "text",
                 "text": prompt_text
             }]
 
-            for frame in frames[:4]:  # Используем первые 4 кадра для анализа
+            for frame in frames[:4]:  # Use first 4 frames for analysis
                 base64_frame = self._encode_media_to_base64(frame)
                 content_parts.append({
                     "type": "image_url",
@@ -738,7 +759,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             if detected_type:
                 content_type = detected_type
 
-            # Определяем формат для OpenAI
+            # Determine format for OpenAI
             if 'png' in content_type or 'image/png' in content_type:
                 media_format = "png"
             elif 'jpeg' in content_type or 'jpg' in content_type:
@@ -773,7 +794,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                     "content": content_parts
                 }
             ],
-            "max_tokens": 4000,  # Увеличено для детального анализа с камерой, освещением и т.д.
+            "max_tokens": 4000,  # Increased for detailed analysis with camera, lighting, etc.
             "temperature": 0.3
         }
 
@@ -781,7 +802,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             "https://api.openai.com/v1/chat/completions",
             headers=headers,
             json=payload,
-            timeout=120,  # Увеличен timeout для детального анализа
+            timeout=120,  # Increased timeout for detailed analysis
         )
         result = response.json()
         analysis_text = result['choices'][0]['message']['content']
@@ -794,7 +815,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             analysis_json.setdefault("metadata", {})
             analysis_json["metadata"]["auto_video_insights"] = video_metadata
 
-            # Дополнительно пробрасываем эвристику движения, если модель не заполнила блок camera_motion
+            # Additionally pass motion heuristics if model didn't fill camera_motion block
             auto_motion = video_metadata.get("auto_motion")
             if auto_motion:
                 if not analysis_json.get("camera_motion"):
@@ -803,17 +824,17 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                         "dominant_motion": auto_motion.get("dominant_motion"),
                         "notes": "Auto-computed fallback; please validate",
                     }
-                # КРИТИЧНО: Добавляем движение объекта, если оно есть
+                # CRITICAL: Add object motion if present
                 subject_motion = auto_motion.get("subject_motion")
                 if subject_motion and subject_motion != "none":
-                    # Добавляем в camera_motion для доступности генератору промптов
+                    # Add to camera_motion for prompt generator access
                     if isinstance(analysis_json.get("camera_motion"), dict):
                         analysis_json["camera_motion"]["subject_motion"] = subject_motion
                         analysis_json["camera_motion"]["subject_motion_notes"] = (
                             "Object movement detected: " + subject_motion +
                             ". Ensure prompt includes micro-movements or subject rotation."
                         )
-                    # Также добавляем на верхний уровень для легкого доступа
+                    # Also add to top level for easy access
                     analysis_json["subject_motion_detected"] = subject_motion
 
             media_block = analysis_json.setdefault("media", {})
@@ -829,11 +850,11 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         return analysis_json
 
     def _analyze_with_gemini(self, media_data: bytes, content_type: str, is_video: bool) -> Dict:
-        """Анализ через Google Gemini (лучше работает с видео)"""
+        """Analysis via Google Gemini (works better with video)"""
         if not self.gemini_api_key:
-            raise ValueError("Gemini API key не найден")
+            raise ValueError("Gemini API key not found")
 
-        # Определяем MIME type
+        # Determine MIME type
         if is_video:
             if 'mp4' in content_type.lower():
                 mime_type = "video/mp4"
@@ -844,15 +865,15 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             else:
                 mime_type = "video/mp4"
 
-            # Для видео используем Gemini File API (поддерживает видео напрямую)
+            # For video use Gemini File API (supports video directly)
             return self._analyze_video_with_gemini_file_api(media_data, mime_type)
         else:
-            # Для изображений используем inline base64
+            # For images use inline base64
             processed_bytes, detected_type = self._prepare_image_bytes(media_data)
             base64_media = self._encode_media_to_base64(processed_bytes)
             mime_type = detected_type or content_type or "image/jpeg"
 
-            # Используем тот же универсальный промпт что и для OpenAI
+            # Use the same universal prompt as for OpenAI
             analysis_prompt = self._get_analysis_prompt()
 
             headers = {
@@ -875,7 +896,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                 }],
                 "generationConfig": {
                     "temperature": 0.3,
-                    "maxOutputTokens": 4000  # Увеличено для детального анализа
+                    "maxOutputTokens": 4000  # Increased for detailed analysis
                 }
             }
 
@@ -895,8 +916,8 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             return analysis_json
 
     def _analyze_video_with_gemini_file_api(self, video_data: bytes, mime_type: str) -> Dict:
-        """Загружает видео через Gemini File API и анализирует"""
-        # Шаг 1: Загружаем файл через File API
+        """Uploads video via Gemini File API and analyzes"""
+        # Step 1: Upload file via File API
         upload_url = f"https://generativelanguage.googleapis.com/upload/v1beta/files?key={self.gemini_api_key}"
 
         headers = {
@@ -925,12 +946,12 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         file_uri = file_metadata.get('file', {}).get('uri')
 
         if not file_uri:
-            raise ValueError("Не удалось загрузить видео в Gemini File API")
+            raise ValueError("Failed to upload video to Gemini File API")
 
-        # Шаг 2: Ждем пока файл обработается (опционально, можно пропустить для быстрых запросов)
-        time.sleep(2)  # Небольшая задержка для обработки файла
+        # Step 2: Wait for file processing (optional, can skip for fast requests)
+        time.sleep(2)  # Small delay for file processing
 
-        # Шаг 3: Анализируем видео через generateContent API
+        # Step 3: Analyze video via generateContent API
         analysis_prompt = self._get_analysis_prompt()
 
         headers = {
@@ -966,12 +987,12 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         result = response.json()
         analysis_text = result['candidates'][0]['content']['parts'][0]['text']
 
-        # Удаляем файл после анализа (опционально)
+        # Delete file after analysis (optional)
         try:
             delete_url = f"https://generativelanguage.googleapis.com/v1beta/{file_uri}?key={self.gemini_api_key}"
             self._http.delete(delete_url, timeout=10)
         except:
-            pass  # Игнорируем ошибки удаления
+            pass  # Ignore deletion errors
 
         analysis_json = self._extract_json_from_text(analysis_text)
         if "raw_analysis" not in analysis_json:
@@ -986,39 +1007,39 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
         use_gemini: bool = False
     ) -> Dict:
         """
-        Анализирует медиа и возвращает структурированное описание
+        Analyzes media and returns structured description
 
         Args:
-            media_source: URL, путь к файлу или bytes медиа
-            content_type: MIME type (опционально)
-            use_gemini: Использовать Gemini вместо OpenAI
+            media_source: URL, file path or bytes media
+            content_type: MIME type (optional)
+            use_gemini: Use Gemini instead of OpenAI
 
         Returns:
-            Dict со структурированным описанием сцены
+            Dict with structured scene description
         """
-        # Определяем тип источника и загружаем данные
+        # Determine source type and load data
         if isinstance(media_source, bytes):
             media_data = media_source
             is_video = self._is_video(content_type or "")
         elif isinstance(media_source, (str, Path)):
             source_str = str(media_source)
-            # Проверяем, URL это или путь к файлу
+            # Check if it's URL or file path
             if source_str.startswith(('http://', 'https://')):
                 media_data, detected_content_type = self._download_media(source_str)
                 content_type = content_type or detected_content_type
             else:
-                # Локальный файл
+                # Local file
                 file_path = Path(source_str)
                 if not file_path.exists():
-                    raise FileNotFoundError(f"Файл не найден: {file_path}")
+                    raise FileNotFoundError(f"File not found: {file_path}")
                 media_data = file_path.read_bytes()
                 content_type = content_type or mimetypes.guess_type(str(file_path))[0]
 
             is_video = self._is_video(content_type or "", str(media_source))
         else:
-            raise ValueError(f"Неподдерживаемый тип источника: {type(media_source)}")
+            raise ValueError(f"Unsupported source type: {type(media_source)}")
 
-        # Выбираем модель для анализа
+        # Choose model for analysis
         analysis_result = None
         model_used = None
         if use_gemini and self.gemini_api_key:
@@ -1026,9 +1047,9 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                 analysis_result = self._analyze_with_gemini(media_data, content_type or "", is_video)
                 model_used = "gemini-1.5-pro"
             except Exception as gemini_error:
-                print(f"[!] Gemini анализ не удался: {gemini_error}")
+                print(f"[!] Gemini analysis failed: {gemini_error}")
                 if self.openai_api_key:
-                    print("[i] Переключаюсь на OpenAI для анализа")
+                    print("[i] Switching to OpenAI for analysis")
                     analysis_result = self._analyze_with_openai(media_data, content_type or "", is_video)
                     model_used = self.preferred_model
                 else:
@@ -1038,9 +1059,9 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                 analysis_result = self._analyze_with_openai(media_data, content_type or "", is_video)
                 model_used = self.preferred_model
             else:
-                raise ValueError("Не найден API key для анализа (нужен OpenAI или Gemini)")
+                raise ValueError("No API key found for analysis (need OpenAI or Gemini)")
 
-        # Добавляем метаданные
+        # Add metadata
         analysis_result['metadata'] = {
             'is_video': is_video,
             'content_type': content_type,
@@ -1051,10 +1072,10 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
 
 
 if __name__ == "__main__":
-    # Тестовый пример
+    # Test example
     analyzer = VisualAnalyzer()
 
-    # Пример использования
+    # Usage example
     # result = analyzer.analyze("https://example.com/jewelry.jpg")
     # print(json.dumps(result, indent=2, ensure_ascii=False))
 

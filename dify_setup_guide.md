@@ -1,47 +1,47 @@
 # Dify Workflow Setup Guide
 
-## Быстрая установка для Video Prompt Pipeline
+## Quick Setup for Video Prompt Pipeline
 
-### Шаг 1: Регистрация
+### Step 1: Registration
 
-1. Зарегистрируйтесь на [dify.ai](https://dify.ai)
-2. Войдите в свой аккаунт
+1. Sign up at [dify.ai](https://dify.ai)
+2. Sign in to your account
 
-### Шаг 2: Настройка API ключей
+### Step 2: API Key Configuration
 
-1. Перейдите в **Settings** → **Model Provider**
-2. Добавьте OpenAI API Key:
+1. Go to **Settings** → **Model Provider**
+2. Add OpenAI API Key:
    - Provider: OpenAI
-   - API Key: ваш ключ от OpenAI
+   - API Key: your OpenAI key
 
-3. (Опционально) Добавьте Google Gemini:
+3. (Optional) Add Google Gemini:
    - Provider: Google
-   - API Key: ваш ключ от Gemini
+   - API Key: your Gemini key
 
-### Шаг 3: Создание Workflow
+### Step 3: Create Workflow
 
-1. Перейдите в **Workflows** → **Create Workflow**
-2. Выберите тип: **Chatflow**
-3. Используйте импорт YAML:
+1. Go to **Workflows** → **Create Workflow**
+2. Select type: **Chatflow**
+3. Use YAML import:
 
-   - Нажмите на меню (три точки) → **Import from YAML**
-   - Загрузите `dify_workflow.yaml`
+   - Click menu (three dots) → **Import from YAML**
+   - Upload `dify_workflow.yaml`
 
-   ИЛИ создайте вручную:
+   OR create manually:
 
-#### Узел Start (Inputs)
-- Добавьте переменные:
+#### Start Node (Inputs)
+- Add variables:
   - `video_url` (text-input, required)
   - `platform` (select: veo3, sora2, seedream)
   - `use_case` (select: product_video, hero_image, gemstone_closeup, luxury_brand, general)
 
-#### Узел HTTP Request (Download Media)
+#### HTTP Request Node (Download Media)
 - Type: HTTP Request
 - Method: GET
 - URL: `{{start.video_url}}`
 - Response Format: File/Binary
 
-#### Узел LLM (Agent 1: Visual Analyzer)
+#### LLM Node (Agent 1: Visual Analyzer)
 - Model: OpenAI GPT-4o
 - Temperature: 0.3
 - Max Tokens: 2000
@@ -64,7 +64,7 @@
   Output as JSON with these fields: main_objects, materials, lighting, camera_work, composition, background_surfaces, motion_dynamics, style_mood
   ```
 
-#### Узел LLM (Agent 2: Prompt Generator)
+#### LLM Node (Agent 2: Prompt Generator)
 - Model: OpenAI GPT-4o
 - Temperature: 0.7
 - Max Tokens: 1000
@@ -84,20 +84,20 @@
   Return ONLY the final prompt in English, ready to use.
   ```
 
-#### Узел Answer
+#### Answer Node
 - Output: `{{generate-node.text}}`
 - Metadata: Include platform and use_case
 
-### Шаг 4: Публикация и API
+### Step 4: Publish and API
 
-1. Сохраните workflow
-2. Нажмите **Publish**
-3. Перейдите в **API Access**
-4. Создайте API Key
+1. Save workflow
+2. Click **Publish**
+3. Go to **API Access**
+4. Create API Key
 
-### Шаг 5: Тестирование
+### Step 5: Testing
 
-#### Через API:
+#### Via API:
 ```bash
 curl -X POST 'https://api.dify.ai/v1/chat-messages' \
   -H 'Authorization: Bearer YOUR_API_KEY' \
@@ -112,25 +112,25 @@ curl -X POST 'https://api.dify.ai/v1/chat-messages' \
   }'
 ```
 
-#### Через UI:
-1. Откройте workflow
-2. Заполните inputs:
+#### Via UI:
+1. Open workflow
+2. Fill inputs:
    - Video URL
    - Platform
    - Use Case
-3. Нажмите **Run**
+3. Click **Run**
 
-## Альтернатива: Использование Python API сервера
+## Alternative: Using Python API Server
 
-Если хотите использовать наш FastAPI сервер с Dify:
+If you want to use our FastAPI server with Dify:
 
-1. Запустите сервер:
+1. Start the server:
    ```bash
    cd video-prompt-pipeline
    python api_server.py
    ```
 
-2. В Dify создайте HTTP Request узел:
+2. In Dify create HTTP Request node:
    - URL: `http://your-server:8000/process`
    - Method: POST
    - Body: Form Data
@@ -138,23 +138,22 @@ curl -X POST 'https://api.dify.ai/v1/chat-messages' \
      - `platform`: `{{start.platform}}`
      - `use_case`: `{{start.use_case}}`
 
-## Особенности Dify
+## Dify Features
 
-- **Визуальный редактор**: Легко настраивать workflow через UI
-- **Versioning**: Сохранение версий workflow
-- **Analytics**: Отслеживание использования
-- **Team Collaboration**: Работа в команде
+- **Visual Editor**: Easy workflow configuration via UI
+- **Versioning**: Workflow version saving
+- **Analytics**: Usage tracking
+- **Team Collaboration**: Team work
 
 ## Troubleshooting
 
-**Ошибка: "File upload failed"**
-- Убедитесь, что HTTP Request node правильно скачивает файл
-- Проверьте доступность URL
+**Error: "File upload failed"**
+- Make sure HTTP Request node correctly downloads the file
+- Check URL availability
 
-**Ошибка: "Model provider not configured"**
-- Проверьте настройки API ключей в Settings
+**Error: "Model provider not configured"**
+- Check API key settings in Settings
 
-**Тайм-аут при анализе**
-- Увеличьте timeout для HTTP Request узла
-- Для видео используйте Gemini (лучше работает с видео)
-
+**Timeout during analysis**
+- Increase timeout for HTTP Request node
+- For videos use Gemini (works better with video)

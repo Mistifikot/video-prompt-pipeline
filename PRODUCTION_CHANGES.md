@@ -1,53 +1,53 @@
 # Video Prompt Pipeline - Production Ready Changes
 
-## Что было сделано:
+## What was done:
 
-### 1. Структурированное логирование
-- ✅ Создан `logger_utils.py` с настраиваемым логированием
-- ✅ Все `print()` заменены на `logger.info/error/warning/debug`
-- ✅ Поддержка логирования в файл и консоль
-- ✅ Настраиваемый уровень логирования через `.env`
+### 1. Structured logging
+- ✅ Created `logger_utils.py` with configurable logging
+- ✅ All `print()` statements replaced with `logger.info/error/warning/debug`
+- ✅ Support for logging to file and console
+- ✅ Configurable log level via `.env`
 
-### 2. Конфигурация
-- ✅ Создан `config.py` с централизованной конфигурацией
-- ✅ Все настройки вынесены в один файл
-- ✅ Валидация конфигурации при запуске
-- ✅ Поддержка переменных окружения через `.env`
+### 2. Configuration
+- ✅ Created `config.py` with centralized configuration
+- ✅ All settings moved to a single file
+- ✅ Configuration validation on startup
+- ✅ Support for environment variables via `.env`
 
-### 3. Обработка ошибок
-- ✅ Улучшена обработка ошибок во всех endpoints
-- ✅ Добавлена валидация входных данных
-- ✅ Правильные HTTP статус-коды
-- ✅ Детальные сообщения об ошибках для отладки
+### 3. Error handling
+- ✅ Improved error handling in all endpoints
+- ✅ Added input data validation
+- ✅ Proper HTTP status codes
+- ✅ Detailed error messages for debugging
 
-### 4. Оптимизация веб-интерфейса
-- ✅ Добавлен режим отладки (`DEBUG_MODE`) для консольных логов
-- ✅ Debug-логи можно отключить для продакшн
-- ✅ Ошибки всегда логируются в консоль
+### 4. Web interface optimization
+- ✅ Added debug mode (`DEBUG_MODE`) for console logs
+- ✅ Debug logs can be disabled for production
+- ✅ Errors are always logged to console
 
-### 5. Код и архитектура
-- ✅ Убрано дублирование кода
-- ✅ Улучшена читаемость и структура
-- ✅ Добавлены docstrings где нужно
-- ✅ Улучшена типизация
+### 5. Code and architecture
+- ✅ Removed code duplication
+- ✅ Improved readability and structure
+- ✅ Added docstrings where needed
+- ✅ Improved type hints
 
-## Новые переменные окружения (.env):
+## New environment variables (.env):
 
 ```bash
-# Логирование
+# Logging
 LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR
 LOG_TO_FILE=false  # true/false
 LOG_FILE=app.log
 
-# Сервер
+# Server
 PORT=8000
 HOST=0.0.0.0
 DEBUG=false  # true/false
 
-# Анализ
+# Analysis
 MAX_FRAMES_FOR_ANALYSIS=8
 
-# Генерация промптов
+# Prompt generation
 DEFAULT_PLATFORM=veo3
 DEFAULT_USE_CASE=product_video
 AUTO_PERPLEXITY_POLISH=false
@@ -57,17 +57,16 @@ PREFER_KIE_API=false
 KIE_VEO_MODEL=veo3
 ```
 
-## Преимущества:
+## Benefits:
 
-1. **Профессиональное логирование** - легко отслеживать проблемы
-2. **Централизованная конфигурация** - все настройки в одном месте
-3. **Лучшая обработка ошибок** - пользователи получают понятные сообщения
-4. **Готовность к продакшн** - можно отключить debug-логи
-5. **Валидация данных** - предотвращение некорректных запросов
+1. **Professional logging** - easy to track issues
+2. **Centralized configuration** - all settings in one place
+3. **Better error handling** - users get clear messages
+4. **Production ready** - debug logs can be disabled
+5. **Data validation** - prevents incorrect requests
 
-## Совместимость:
+## Compatibility:
 
-✅ Все изменения обратно совместимы
-✅ Старый код продолжает работать
-✅ Можно использовать старые переменные окружения
-
+✅ All changes are backward compatible
+✅ Old code continues to work
+✅ Can use old environment variables

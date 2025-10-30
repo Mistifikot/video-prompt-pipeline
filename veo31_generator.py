@@ -1,9 +1,9 @@
 """
-Полный workflow для генерации видео в Veo 3.1:
-1. Анализ референсного видео (если есть)
-2. Анализ референсных изображений (3 шт)
-3. Генерация промпта
-4. Генерация видео в Veo 3.1
+Full workflow for video generation in Veo 3.1:
+1. Reference video analysis (if available)
+2. Reference image analysis (3 images)
+3. Prompt generation
+4. Video generation in Veo 3.1
 """
 
 import os
@@ -14,7 +14,7 @@ import json
 import mimetypes
 import requests
 
-# Импорт логирования
+# Import logging
 try:
     from logger_utils import logger
 except ImportError:
@@ -43,7 +43,7 @@ from media_uploader import build_image_uploader
 
 
 class Veo31VideoGenerator:
-    """Полный пайплайн для генерации видео в Veo 3.1 с референсами"""
+    """Full pipeline for video generation in Veo 3.1 with references"""
 
     def __init__(
         self,
@@ -55,11 +55,11 @@ class Veo31VideoGenerator:
         prefer_kie_default: Optional[bool] = None
     ):
         """
-        Инициализация генератора
+        Initialize generator
 
         Args:
-            openai_api_key: API ключ OpenAI для анализа
-            gemini_api_key: API ключ Google для Veo 3.1
+            openai_api_key: OpenAI API key for analysis
+            gemini_api_key: Google API key for Veo 3.1
         """
         resolved_gemini_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
 
@@ -75,11 +75,11 @@ class Veo31VideoGenerator:
         if resolved_gemini_key:
             try:
                 self.veo_client = Veo31Client(api_key=resolved_gemini_key)
-                print("[OK] Veo 3.1 клиент (Google) инициализирован")
+                print("[OK] Veo 3.1 client (Google) initialized")
             except Exception as gemini_error:
-                print(f"[!] Не удалось инициализировать Veo 3.1 клиента: {gemini_error}")
+                print(f"[!] Failed to initialize Veo 3.1 client: {gemini_error}")
         else:
-            print("[i] GEMINI_API_KEY не найден, пропускаю Veo 3.1 (Google) клиента")
+            print("[i] GEMINI_API_KEY not found, skipping Veo 3.1 (Google) client")
 
         self.kie_client: Optional[KieVeoClient] = None
         self.use_kie_default = prefer_kie_default
@@ -90,9 +90,9 @@ class Veo31VideoGenerator:
         if kie_key:
             try:
                 self.kie_client = KieVeoClient(api_key=kie_key)
-                print("[OK] Kie.ai клиент инициализирован")
+                print("[OK] Kie.ai client initialized")
             except Exception as kie_error:
-                print(f"[!] Не удалось инициализировать Kie.ai клиента: {kie_error}")
+                print(f"[!] Failed to initialize Kie.ai client: {kie_error}")
 
         self.image_uploader = build_image_uploader() if kie_key else None
 
@@ -105,40 +105,40 @@ class Veo31VideoGenerator:
         polish_with_perplexity: Optional[bool] = None
     ) -> Dict:
         """
-        Только анализ референсов и генерация промпта (без генерации видео)
-        Логика: сначала видео, потом изображения
+        Only reference analysis and prompt generation (without video generation)
+        Logic: video first, then images
 
         Args:
-            reference_images: Список референсных изображений
-            video_reference: Опциональное референсное видео
-            platform: Платформа (veo3)
-            use_case: Тип задачи
-            polish_with_perplexity: Полировать промпт через Perplexity
+            reference_images: List of reference images
+            video_reference: Optional reference video
+            platform: Platform (veo3)
+            use_case: Task type
+            polish_with_perplexity: Polish prompt via Perplexity
 
         Returns:
-            Dict с анализом и промптом
+            Dict with analysis and prompt
         """
         if not reference_images:
-            raise ValueError("Необходимо минимум одно референсное изображение")
+            raise ValueError("At least one reference image required")
 
         combined_analysis = {}
         video_analysis = None
         video_meta = None
 
-        # ШАГ 1: Анализ видео (если есть) - ПЕРВЫМ
+        # STEP 1: Video analysis (if available) - FIRST
         if video_reference:
             try:
-                logger.info("Шаг 1.1: Анализ видео-референса через OpenAI...")
+                logger.info("Step 1.1: Analyzing video reference via OpenAI...")
                 resolved_video = self._resolve_media_input(video_reference, "reference_video")
                 video_source = resolved_video.get("source")
 
                 if video_source is None:
-                    logger.warning("Не удалось получить источник видео-референса")
+                    logger.warning("Failed to get video reference source")
                 else:
                     video_analysis = self.pipeline.analyzer.analyze(
                         media_source=video_source,
                         content_type=resolved_video.get("content_type"),
-                        use_gemini=False  # Всегда используем OpenAI
+                        use_gemini=False  # Always use OpenAI
                     )
                     video_meta = {
                         "label": resolved_video.get("label"),
@@ -146,14 +146,14 @@ class Veo31VideoGenerator:
                     }
                     metadata_model = video_analysis.get("metadata", {}).get("model_used")
                     video_meta["model_used"] = metadata_model
-                    logger.info(f"Видео-референс проанализирован успешно через {metadata_model}")
+                    logger.info(f"Video reference analyzed successfully via {metadata_model}")
             except Exception as video_error:
-                logger.error(f"Ошибка при анализе видео-референса: {video_error}", exc_info=True)
+                logger.error(f"Error analyzing video reference: {video_error}", exc_info=True)
                 video_analysis = {"error": str(video_error)}
                 video_meta = {"error": str(video_error)}
 
-        # ШАГ 2: Анализ изображений - ВТОРЫМ
-        logger.info("Шаг 1.2: Анализ изображений через OpenAI...")
+        # STEP 2: Image analysis - SECOND
+        logger.info("Step 1.2: Analyzing images via OpenAI...")
         image_analysis_payloads = []
         prepared_images_for_generation: List[Dict] = []
 
@@ -163,7 +163,7 @@ class Veo31VideoGenerator:
                 source = resolved.get("source")
 
                 if source is None:
-                    logger.warning(f"Изображение {idx}: нет данных")
+                    logger.warning(f"Image {idx}: no data")
                     image_analysis_payloads.append({
                         "analysis": {"error": "No image data provided"},
                         "meta": resolved
@@ -171,12 +171,12 @@ class Veo31VideoGenerator:
                     continue
 
                 content_type = resolved.get("content_type") or "image/jpeg"
-                logger.info(f"Анализ изображения {idx}: {resolved.get('label')}")
+                logger.info(f"Analyzing image {idx}: {resolved.get('label')}")
 
                 analysis = self.pipeline.analyzer.analyze(
                     media_source=source,
                     content_type=content_type,
-                    use_gemini=False  # Всегда используем OpenAI
+                    use_gemini=False  # Always use OpenAI
                 )
 
                 image_analysis_payloads.append({
@@ -196,17 +196,17 @@ class Veo31VideoGenerator:
                 })
 
             except Exception as image_error:
-                logger.error(f"Ошибка анализа изображения {idx}: {image_error}", exc_info=True)
+                logger.error(f"Image analysis error {idx}: {image_error}", exc_info=True)
                 image_analysis_payloads.append({
                     "analysis": {"error": str(image_error)},
                     "meta": {"label": f"reference_image_{idx}", "error": True}
                 })
 
-        # Агрегируем результаты анализа изображений
+        # Aggregate image analysis results
         image_aggregate = self._aggregate_image_analyses(image_analysis_payloads)
         combined_analysis = dict(image_aggregate)
 
-        # Объединяем с анализом видео если есть
+        # Merge with video analysis if available
         if video_analysis:
             combined_analysis = self._merge_analyses(image_aggregate, video_analysis, video_meta)
             combined_analysis["video_analysis"] = video_analysis
@@ -217,26 +217,26 @@ class Veo31VideoGenerator:
         combined_analysis["image_reference_notes"] = image_aggregate.get("reference_notes")
         combined_analysis["image_sources"] = image_aggregate.get("sources")
 
-        # ШАГ 3: Генерация промпта
-        logger.info("Шаг 2: Генерация промпта...")
+        # STEP 3: Prompt generation
+        logger.info("Step 2: Generating prompt...")
 
-        # Проверяем, есть ли структурированные данные для генерации промпта
+        # Check if structured data exists for prompt generation
         has_main_objects = bool(combined_analysis.get("main_objects"))
         has_materials = bool(combined_analysis.get("materials"))
         has_lighting = bool(combined_analysis.get("lighting"))
         has_raw_analysis = bool(combined_analysis.get("reference_notes") or combined_analysis.get("image_analysis_summary"))
 
         if not (has_main_objects or has_materials or has_lighting):
-            # Если нет структурированных данных, пытаемся использовать текстовые данные
+            # If no structured data, try using text data
             if has_raw_analysis:
-                logger.warning("Нет структурированных данных анализа, используем текстовое описание")
+                logger.warning("No structured analysis data, using text description")
                 combined_analysis["raw_analysis"] = combined_analysis.get("image_analysis_summary", "") or " ".join(combined_analysis.get("reference_notes", []))
             else:
-                logger.error("Анализ не вернул данных для генерации промпта!")
+                logger.error("Analysis returned no data for prompt generation!")
                 return {
                     "step1_analysis": combined_analysis,
-                    "step2_prompt": "Ошибка: Анализ изображений не вернул структурированных данных. Проверьте доступность OpenAI API и формат изображений.",
-                    "prompt": "Ошибка: Анализ изображений не вернул структурированных данных. Проверьте доступность OpenAI API и формат изображений.",
+                    "step2_prompt": "Error: Image analysis did not return structured data. Check OpenAI API availability and image format.",
+                    "prompt": "Error: Image analysis did not return structured data. Check OpenAI API availability and image format.",
                     "ready_for_editing": True
                 }
 
@@ -249,15 +249,29 @@ class Veo31VideoGenerator:
             )
 
             generated_prompt = prompt_result["prompt"]
-            logger.info("Промпт сгенерирован успешно")
+
+            # Check if prompt generation actually succeeded (not an error message)
+            if generated_prompt.startswith("Prompt generation error:") or generated_prompt.startswith("Error:"):
+                logger.error(f"Prompt generation returned error: {generated_prompt}")
+                raise ValueError(f"Prompt generation failed: {generated_prompt}")
+
+            logger.info("Prompt generated successfully")
         except Exception as prompt_error:
-            logger.error(f"Ошибка генерации промпта: {prompt_error}", exc_info=True)
-            generated_prompt = f"Ошибка генерации промпта: {str(prompt_error)}"
+            logger.error(f"Prompt generation error: {prompt_error}", exc_info=True)
+            generated_prompt = f"Prompt generation error: {str(prompt_error)}"
+            # Mark as not ready if there was an error
+            return {
+                "step1_analysis": combined_analysis,
+                "step2_prompt": generated_prompt,
+                "prompt": generated_prompt,
+                "ready_for_editing": False,
+                "error": str(prompt_error)
+            }
 
         return {
             "step1_analysis": combined_analysis,
             "step2_prompt": generated_prompt,
-            "prompt": generated_prompt,  # Дублируем для совместимости
+            "prompt": generated_prompt,  # Duplicate for compatibility
             "ready_for_editing": True
         }
 
@@ -275,22 +289,22 @@ class Veo31VideoGenerator:
         prefer_kie_api: Optional[bool] = None
     ) -> Dict:
         """
-        Полный цикл: анализ → промпт → генерация видео
+        Full cycle: analysis → prompt → video generation
 
         Args:
-            reference_images: Список из 3 референсных изображений
-            video_reference: Опциональное референсное видео для анализа стиля
-            platform: Платформа (veo3)
-            use_case: Тип задачи
-            duration_seconds: Длительность видео
-            aspect_ratio: Соотношение сторон
-            quality: Качество (для Google Veo). Для Kie.ai преобразуется в model:
-                "high" -> "veo3", иначе -> "veo3_fast"
-            additional_prompt: Дополнительные инструкции к промпту
-            prefer_kie_api: Принудительно использовать Kie.ai API (если доступен)
+            reference_images: List of 3 reference images
+            video_reference: Optional reference video for style analysis
+            platform: Platform (veo3)
+            use_case: Task type
+            duration_seconds: Video duration
+            aspect_ratio: Aspect ratio
+            quality: Quality (for Google Veo). For Kie.ai converted to model:
+                "high" -> "veo3", otherwise -> "veo3_fast"
+            additional_prompt: Additional prompt instructions
+            prefer_kie_api: Force use Kie.ai API (if available)
 
         Returns:
-            Dict с результатом генерации
+            Dict with generation result
         """
         results = {
             "step1_analysis": None,
@@ -298,11 +312,11 @@ class Veo31VideoGenerator:
             "step3_video_generation": None
         }
 
-        # Шаг 1: Анализ референсов
-        logger.info("Шаг 1: Анализ референсных материалов...")
+        # Step 1: Reference analysis
+        logger.info("Step 1: Analyzing reference materials...")
 
         if not reference_images:
-            raise ValueError("Необходимо минимум одно референсное изображение")
+            raise ValueError("At least one reference image required")
 
         image_analysis_payloads = []
         prepared_images_for_generation: List[Dict] = []
@@ -316,14 +330,14 @@ class Veo31VideoGenerator:
 
             content_type = resolved.get("content_type") or "image/jpeg"
             try:
-                logger.debug(f"Анализ изображения {idx}: {resolved.get('label')}")
+                logger.debug(f"Analyzing image {idx}: {resolved.get('label')}")
                 analysis = self.pipeline.analyzer.analyze(
                     media_source=source,
                     content_type=content_type,
                     use_gemini=False
                 )
             except Exception as image_error:
-                logger.error(f"Ошибка анализа изображения {idx}: {image_error}", exc_info=True)
+                logger.error(f"Error analyzing image {idx}: {image_error}", exc_info=True)
                 analysis = {"error": str(image_error)}
 
             image_analysis_payloads.append({
@@ -350,7 +364,7 @@ class Veo31VideoGenerator:
 
         if video_reference:
             try:
-                print("Анализ видео-референса...")
+                print("Analyzing video reference...")
                 resolved_video = self._resolve_media_input(video_reference, "reference_video")
                 video_meta = {
                     "label": resolved_video.get("label"),
@@ -364,9 +378,9 @@ class Veo31VideoGenerator:
                 metadata_model = video_analysis.get("metadata", {}).get("model_used")
                 video_meta["fallback_used"] = metadata_model != "gemini-1.5-pro"
                 combined_analysis = self._merge_analyses(image_aggregate, video_analysis, video_meta)
-                print("Видео-референс проанализирован успешно")
+                print("Video reference analyzed successfully")
             except Exception as video_error:
-                print(f"Ошибка при анализе видео-референса (продолжаем без него): {video_error}")
+                print(f"Error analyzing video reference (continuing without it): {video_error}")
 
         combined_analysis["image_analysis_summary"] = image_aggregate.get("reference_summary")
         combined_analysis["image_reference_notes"] = image_aggregate.get("reference_notes")
@@ -378,24 +392,24 @@ class Veo31VideoGenerator:
 
         results["step1_analysis"] = combined_analysis
 
-        # Шаг 2: Генерация промпта
-        logger.info("Шаг 2: Генерация промпта...")
+        # Step 2: Prompt generation
+        logger.info("Step 2: Generating prompt...")
 
-        # Проверяем, есть ли структурированные данные для генерации промпта
+        # Check if structured data exists for prompt generation
         has_main_objects = bool(combined_analysis.get("main_objects"))
         has_materials = bool(combined_analysis.get("materials"))
         has_lighting = bool(combined_analysis.get("lighting"))
         has_raw_analysis = bool(combined_analysis.get("reference_notes") or combined_analysis.get("image_analysis_summary"))
 
         if not (has_main_objects or has_materials or has_lighting):
-            # Если нет структурированных данных, пытаемся использовать текстовые данные
+            # If no structured data, try using text data
             if has_raw_analysis:
-                logger.warning("Нет структурированных данных анализа, используем текстовое описание")
-                # Создаем минимальную структуру из текстовых данных
+                logger.warning("No structured analysis data, using text description")
+                # Create minimal structure from text data
                 combined_analysis["raw_analysis"] = combined_analysis.get("image_analysis_summary", "") or " ".join(combined_analysis.get("reference_notes", []))
             else:
-                logger.error("Анализ не вернул данных для генерации промпта!")
-                results["step2_prompt"] = "Ошибка: Анализ изображений не вернул структурированных данных. Проверьте доступность OpenAI API и формат изображений."
+                logger.error("Analysis returned no data for prompt generation!")
+                results["step2_prompt"] = "Error: Image analysis did not return structured data. Check OpenAI API availability and image format."
                 generated_prompt = None
 
         if not results.get("step2_prompt"):
@@ -409,25 +423,25 @@ class Veo31VideoGenerator:
 
                 generated_prompt = prompt_result["prompt"]
 
-                # Добавляем дополнительные инструкции если есть
+                # Add additional instructions if available
                 if additional_prompt:
                     generated_prompt = f"{generated_prompt}. {additional_prompt}"
 
                 results["step2_prompt"] = generated_prompt
-                logger.info("Промпт сгенерирован успешно")
+                logger.info("Prompt generated successfully")
             except Exception as prompt_error:
-                logger.error(f"Ошибка генерации промпта: {prompt_error}", exc_info=True)
-                results["step2_prompt"] = f"Ошибка генерации промпта: {str(prompt_error)}"
+                logger.error(f"Prompt generation error: {prompt_error}", exc_info=True)
+                results["step2_prompt"] = f"Prompt generation error: {str(prompt_error)}"
                 generated_prompt = None
 
-        # Шаг 3: Генерация видео
-        logger.info("Шаг 3: Генерация видео...")
+        # Step 3: Video generation
+        logger.info("Step 3: Generating video...")
 
         generated_prompt = results.get("step2_prompt")
-        if not generated_prompt or generated_prompt.startswith("Ошибка"):
+        if not generated_prompt or generated_prompt.startswith("Error"):
             results["step3_video_generation"] = {
                 "status": "failed",
-                "error": "Не удалось сгенерировать промпт",
+                "error": "Failed to generate prompt",
                 "provider": None
             }
             return results
@@ -470,10 +484,10 @@ class Veo31VideoGenerator:
                 final_generation = wrap_google(google_payload)
                 generation_attempts.append({"provider": "google", "status": final_generation["status"]})
                 if final_generation.get("status") == "processing":
-                    logger.info(f"Видео генерируется (Google), task_id: {final_generation.get('task_id')}")
+                    logger.info(f"Video generating (Google), task_id: {final_generation.get('task_id')}")
             except Exception as google_exception:
                 google_error = str(google_exception)
-                logger.error(f"Google Veo генерация не удалась: {google_error}", exc_info=True)
+                logger.error(f"Google Veo generation failed: {google_error}", exc_info=True)
                 generation_attempts.append({"provider": "google", "status": "failed", "error": google_error})
 
         should_try_kie = self.kie_client is not None and (prefer_kie or final_generation is None or final_generation.get("status") == "failed")
@@ -489,7 +503,7 @@ class Veo31VideoGenerator:
                     continue
 
                 if not self.image_uploader:
-                    upload_notes.append(f"{item.get('filename') or 'image'}: нет публичного URL и uploader не настроен")
+                    upload_notes.append(f"{item.get('filename') or 'image'}: no public URL and uploader not configured")
                     continue
 
                 data = item.get("data")
@@ -499,7 +513,7 @@ class Veo31VideoGenerator:
                     try:
                         data = Path(item["path"]).read_bytes()
                     except Exception as fs_err:
-                        upload_notes.append(f"{item.get('filename') or 'image'}: не удалось прочитать файл ({fs_err})")
+                        upload_notes.append(f"{item.get('filename') or 'image'}: failed to read file ({fs_err})")
                         data = None
 
                 if data is None and item.get("url"):
@@ -508,26 +522,26 @@ class Veo31VideoGenerator:
                         data = resp.content
                         content_type = item.get("content_type") or resp.headers.get("content-type") or content_type
                     except requests.RequestException as req_err:
-                        upload_notes.append(f"{item.get('filename') or 'image'}: не удалось скачать для загрузки ({req_err})")
+                        upload_notes.append(f"{item.get('filename') or 'image'}: failed to download for upload ({req_err})")
                         data = None
 
                 if not data:
-                    upload_notes.append(f"{item.get('filename') or 'image'}: нет доступных данных для загрузки")
+                    upload_notes.append(f"{item.get('filename') or 'image'}: no available data for upload")
                     continue
 
                 try:
                     uploaded_url = self.image_uploader.upload_image(data, item.get("filename"), content_type)
                     kie_image_urls.append(uploaded_url)
-                    upload_notes.append(f"{item.get('filename') or 'image'} загружено -> {uploaded_url}")
+                    upload_notes.append(f"{item.get('filename') or 'image'} uploaded -> {uploaded_url}")
                 except Exception as upload_error:
-                    upload_notes.append(f"{item.get('filename') or 'image'}: ошибка загрузки ({upload_error})")
+                    upload_notes.append(f"{item.get('filename') or 'image'}: upload error ({upload_error})")
 
             include_images = len(kie_image_urls) == len(prepared_images_for_generation) and len(kie_image_urls) > 0
 
             try:
                 generation_type = "REFERENCE_2_VIDEO" if include_images else "TEXT_2_VIDEO"
 
-                # Всегда используем veo3_fast по умолчанию
+                # Always use veo3_fast by default
                 kie_model = os.getenv("KIE_VEO_MODEL")
                 if not kie_model:
                     kie_model = "veo3_fast"
@@ -546,15 +560,15 @@ class Veo31VideoGenerator:
                     final_generation.setdefault("notes", []).extend(upload_notes)
 
                 if not include_images and prepared_images_for_generation:
-                    attempt_record["note"] = "Изображения не переданы (нет публичных URL)"
+                    attempt_record["note"] = "Images not passed (no public URLs)"
                     final_generation.setdefault("notes", []).append("Images skipped: no external URLs available")
 
                 generation_attempts.append(attempt_record)
                 if final_generation.get("status") == "submitted":
-                    print(f"Видео задача отправлена в Kie.ai, task_id: {final_generation.get('task_id')}")
+                    print(f"Video task submitted to Kie.ai, task_id: {final_generation.get('task_id')}")
             except Exception as kie_exception:
                 generation_attempts.append({"provider": "kie.ai", "status": "failed", "error": str(kie_exception)})
-                print(f"[!] Kie.ai генерация не удалась: {kie_exception}")
+                print(f"[!] Kie.ai generation failed: {kie_exception}")
 
         if final_generation is None:
             failure_payload: Dict[str, Union[str, List[Dict]]] = {
@@ -579,7 +593,7 @@ class Veo31VideoGenerator:
         return results
 
     def _aggregate_image_analyses(self, analyses: List[Dict]) -> Dict:
-        """Объединяет результаты анализа нескольких изображений"""
+        """Combines results of multiple image analyses"""
         aggregated = {
             "main_objects": [],
             "materials": defaultdict(list),
@@ -621,7 +635,7 @@ class Veo31VideoGenerator:
                         else:
                             aggregated[field][key].append(val)
 
-        # Преобразуем defaultdict обратно в обычные структуры
+        # Convert defaultdict back to normal structures
         for field in ["materials", "lighting", "camera_work", "composition", "background_surfaces", "style_mood"]:
             aggregated[field] = {
                 key: _dedupe_preserve_order(values) if isinstance(values, list) else values
@@ -631,7 +645,7 @@ class Veo31VideoGenerator:
         aggregated["main_objects"] = _dedupe_preserve_order(aggregated["main_objects"])
         aggregated["source_count"] = len(analyses)
 
-        # Создаем резюме
+        # Create summary
         summary_parts = []
         if aggregated["main_objects"]:
             summary_parts.append(f"Primary subjects: {', '.join(aggregated['main_objects'])}.")
@@ -646,25 +660,25 @@ class Veo31VideoGenerator:
         return aggregated
 
     def _merge_analyses(self, image_analysis: Dict, video_analysis: Dict, video_meta: Optional[Dict] = None) -> Dict:
-        """Объединяет анализы изображения и видео
+        """Merges image and video analyses
 
-        Приоритеты:
-        - Объекты: из изображений (изображения показывают что именно снимать)
-        - Движение камеры: из видео (видео показывает как двигать камеру)
-        - Освещение: из видео (видео показывает динамику света)
-        - Материалы: объединяем (из обоих источников)
-        - Композиция: из изображений (статика)
-        - Motion dynamics: только из видео
+        Priorities:
+        - Objects: from images (images show what exactly to shoot)
+        - Camera movement: from video (video shows how to move camera)
+        - Lighting: from video (video shows light dynamics)
+        - Materials: combine (from both sources)
+        - Composition: from images (static)
+        - Motion dynamics: only from video
         """
         merged = dict(image_analysis) if image_analysis else {}
 
         if not video_analysis:
             return merged
 
-        # Объекты: приоритет изображениям (они показывают что именно снимать)
+        # Objects: priority to images (they show what exactly to shoot)
         image_objects = image_analysis.get("main_objects", []) if image_analysis else []
         video_objects = video_analysis.get("main_objects", [])
-        # Объединяем, но изображения в начале
+        # Combine, but images first
         merged["main_objects"] = _dedupe_preserve_order(image_objects + video_objects)
 
         def merge_field(field_name: str, prefer_video: bool = False):
@@ -672,42 +686,42 @@ class Veo31VideoGenerator:
             video_field = video_analysis.get(field_name, {})
 
             if prefer_video and video_field:
-                # Для видео-приоритетных полей (camera_work, motion) используем видео
+                # For video-priority fields (camera_work, motion) use video
                 return video_field
 
-            # Для остальных объединяем
+            # For others combine
             combined = dict(image_field)
             if isinstance(video_field, dict):
                 for key, val in video_field.items():
                     if key in combined and isinstance(combined[key], list) and isinstance(val, list):
                         combined[key] = _dedupe_preserve_order(combined[key] + val)
                     else:
-                        # Если ключа нет в изображениях или это не список, берем из видео
+                        # If key not in images or not a list, take from video
                         combined[key] = val
             return combined
 
-        # Материалы: объединяем из обоих источников
+        # Materials: combine from both sources
         merged["materials"] = merge_field("materials")
 
-        # Освещение: приоритет видео (показывает динамику света)
+        # Lighting: priority to video (shows light dynamics)
         merged["lighting"] = merge_field("lighting", prefer_video=True) or image_analysis.get("lighting", {})
 
-        # Движение камеры: ТОЛЬКО из видео (это ключевое отличие видео от изображений)
+        # Camera movement: ONLY from video (this is key difference between video and images)
         merged["camera_work"] = video_analysis.get("camera_work", {}) or merge_field("camera_work", prefer_video=True)
 
-        # Композиция: из изображений (статичная композиция)
+        # Composition: from images (static composition)
         merged["composition"] = image_analysis.get("composition", {}) if image_analysis else {}
 
-        # Фон: из изображений
+        # Background: from images
         merged["background_surfaces"] = image_analysis.get("background_surfaces", {}) if image_analysis else {}
 
-        # Движение: ТОЛЬКО из видео
+        # Movement: ONLY from video
         merged["motion_dynamics"] = video_analysis.get("motion_dynamics", {})
 
-        # Стиль и настроение: объединяем
+        # Style and mood: combine
         merged["style_mood"] = merge_field("style_mood")
 
-        # Добавляем текстовые резюме с явным указанием источников
+        # Add text summaries with explicit source indication
         notes = list(image_analysis.get("reference_notes", [])) if image_analysis else []
         if video_analysis.get("raw_analysis"):
             notes.append(f"[VIDEO REFERENCE] {video_analysis['raw_analysis']}")
@@ -724,7 +738,7 @@ class Veo31VideoGenerator:
         merged["integrated_summary"] = " ".join(summary)
         merged["reference_notes"] = notes
 
-        # Добавляем флаг что использовались оба источника
+        # Add flag that both sources were used
         merged["has_image_reference"] = bool(image_analysis)
         merged["has_video_reference"] = True
 
@@ -748,21 +762,21 @@ class Veo31VideoGenerator:
         prefer_kie_api: Optional[bool] = None
     ) -> Dict:
         """
-        Генерация видео с уже готовым промптом (после редактирования)
+        Video generation with ready prompt (after editing)
 
         Args:
-            prompt: Готовый промпт (возможно отредактированный)
-            reference_images: Список референсных изображений
-            video_reference: Опциональное референсное видео
-            duration_seconds: Длительность видео
-            aspect_ratio: Соотношение сторон
-            quality: Качество
-            prefer_kie_api: Принудительно использовать Kie.ai API
+            prompt: Ready prompt (possibly edited)
+            reference_images: List of reference images
+            video_reference: Optional reference video
+            duration_seconds: Video duration
+            aspect_ratio: Aspect ratio
+            quality: Quality
+            prefer_kie_api: Force use Kie.ai API
 
         Returns:
-            Dict с результатом генерации видео
+            Dict with video generation result
         """
-        # Подготавливаем изображения для генерации
+        # Prepare images for generation
         prepared_images_for_generation: List[Dict] = []
 
         for idx, image_entry in enumerate(reference_images, start=1):
@@ -779,8 +793,8 @@ class Veo31VideoGenerator:
                 "filename": resolved.get("label")
             })
 
-        # Шаг 3: Генерация видео
-        print("Шаг 3: Генерация видео с готовым промптом...")
+        # Step 3: Video generation
+        print("Step 3: Generating video with ready prompt...")
 
         prefer_kie = prefer_kie_api if prefer_kie_api is not None else self.use_kie_default
         generation_attempts: List[Dict] = []
@@ -820,11 +834,11 @@ class Veo31VideoGenerator:
                 final_generation = wrap_google(google_payload)
                 generation_attempts.append({"provider": "google", "status": final_generation["status"]})
                 if final_generation.get("status") == "processing":
-                    print(f"Видео генерируется (Google), task_id: {final_generation.get('task_id')}")
+                    print(f"Video generating (Google), task_id: {final_generation.get('task_id')}")
             except Exception as google_exception:
                 google_error = str(google_exception)
                 generation_attempts.append({"provider": "google", "status": "failed", "error": google_error})
-                print(f"[!] Google Veo генерация не удалась: {google_error}")
+                print(f"[!] Google Veo generation failed: {google_error}")
 
         should_try_kie = self.kie_client is not None and (prefer_kie or final_generation is None or final_generation.get("status") == "failed")
 
@@ -839,7 +853,7 @@ class Veo31VideoGenerator:
                     continue
 
                 if not self.image_uploader:
-                    upload_notes.append(f"{item.get('filename') or 'image'}: нет публичного URL и uploader не настроен")
+                    upload_notes.append(f"{item.get('filename') or 'image'}: no public URL and uploader not configured")
                     continue
 
                 data = item.get("data")
@@ -849,7 +863,7 @@ class Veo31VideoGenerator:
                     try:
                         data = Path(item["path"]).read_bytes()
                     except Exception as fs_err:
-                        upload_notes.append(f"{item.get('filename') or 'image'}: не удалось прочитать файл ({fs_err})")
+                        upload_notes.append(f"{item.get('filename') or 'image'}: failed to read file ({fs_err})")
                         data = None
 
                 if data is None and item.get("url"):
@@ -858,19 +872,19 @@ class Veo31VideoGenerator:
                         data = resp.content
                         content_type = item.get("content_type") or resp.headers.get("content-type") or content_type
                     except requests.RequestException as req_err:
-                        upload_notes.append(f"{item.get('filename') or 'image'}: не удалось скачать для загрузки ({req_err})")
+                        upload_notes.append(f"{item.get('filename') or 'image'}: failed to download for upload ({req_err})")
                         data = None
 
                 if not data:
-                    upload_notes.append(f"{item.get('filename') or 'image'}: нет доступных данных для загрузки")
+                    upload_notes.append(f"{item.get('filename') or 'image'}: no available data for upload")
                     continue
 
                 try:
                     uploaded_url = self.image_uploader.upload_image(data, item.get("filename"), content_type)
                     kie_image_urls.append(uploaded_url)
-                    upload_notes.append(f"{item.get('filename') or 'image'} загружено -> {uploaded_url}")
+                    upload_notes.append(f"{item.get('filename') or 'image'} uploaded -> {uploaded_url}")
                 except Exception as upload_error:
-                    upload_notes.append(f"{item.get('filename') or 'image'}: ошибка загрузки ({upload_error})")
+                    upload_notes.append(f"{item.get('filename') or 'image'}: upload error ({upload_error})")
 
             include_images = len(kie_image_urls) == len(prepared_images_for_generation) and len(kie_image_urls) > 0
 
@@ -895,15 +909,15 @@ class Veo31VideoGenerator:
                     final_generation.setdefault("notes", []).extend(upload_notes)
 
                 if not include_images and prepared_images_for_generation:
-                    attempt_record["note"] = "Изображения не переданы (нет публичных URL)"
+                    attempt_record["note"] = "Images not passed (no public URLs)"
                     final_generation.setdefault("notes", []).append("Images skipped: no external URLs available")
 
                 generation_attempts.append(attempt_record)
                 if final_generation.get("status") == "submitted":
-                    print(f"Видео задача отправлена в Kie.ai, task_id: {final_generation.get('task_id')}")
+                    print(f"Video task submitted to Kie.ai, task_id: {final_generation.get('task_id')}")
             except Exception as kie_exception:
                 generation_attempts.append({"provider": "kie.ai", "status": "failed", "error": str(kie_exception)})
-                print(f"[!] Kie.ai генерация не удалась: {kie_exception}")
+                print(f"[!] Kie.ai generation failed: {kie_exception}")
 
         if final_generation is None:
             failure_payload: Dict[str, Union[str, List[Dict]]] = {
@@ -927,66 +941,66 @@ class Veo31VideoGenerator:
 
     def check_status(self, task_id: str, provider: str = "google") -> Dict:
         """
-        Проверяет статус генерации видео
+        Checks video generation status
 
         Args:
-            task_id: ID задачи генерации
-            provider: "google" или "kie" - провайдер для проверки
+            task_id: Generation task ID
+            provider: "google" or "kie" - provider to check
 
         Returns:
-            Dict со статусом и video_url если готово
+            Dict with status and video_url if ready
         """
         if provider == "kie" and self.kie_client:
             return self.kie_client.check_task_status(task_id)
         elif provider == "google" and self.veo_client:
             return self.veo_client.check_video_status(task_id)
         else:
-            raise ValueError(f"Провайдер {provider} не доступен или не инициализирован")
+            raise ValueError(f"Provider {provider} is not available or not initialized")
 
     def check_kie_status(self, task_id: str) -> Dict:
-        """Проверяет статус генерации видео в Kie.ai"""
+        """Checks video generation status in Kie.ai"""
         if not self.kie_client:
-            raise ValueError("Kie.ai клиент не инициализирован")
+            raise ValueError("Kie.ai client is not initialized")
         return self.kie_client.check_task_status(task_id)
 
     def _download_media_with_headers(self, url: str, max_retries: int = 3) -> requests.Response:
         """
-        Скачивает медиа по URL с правильными заголовками браузера для обхода блокировок
-        Возвращает Response объект для дальнейшей обработки
+        Downloads media from URL with proper browser headers to bypass blocks
+        Returns Response object for further processing
         """
         from urllib.parse import urlparse
 
-        # Формируем правильный Referer из домена URL
+        # Form proper Referer from URL domain
         parsed_url = urlparse(url)
         referer = f"{parsed_url.scheme}://{parsed_url.netloc}/"
 
-        # Разные User-Agent для попыток
+        # Different User-Agents for attempts
         user_agents = [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ]
 
-        # Retry логика с разными подходами (БЕЗ Sec-Fetch заголовков!)
+        # Retry logic with different approaches (WITHOUT Sec-Fetch headers!)
         last_error = None
         for attempt in range(max_retries):
             try:
-                # Пробуем разные наборы заголовков
+                # Try different header sets
                 if attempt == 0:
-                    # Первая попытка: минимальные заголовки без Referer
+                    # First attempt: minimal headers without Referer
                     headers = {
                         'User-Agent': user_agents[0],
                         'Accept': '*/*'
                     }
                 elif attempt == 1:
-                    # Вторая попытка: с Referer
+                    # Second attempt: with Referer
                     headers = {
                         'User-Agent': user_agents[1],
                         'Accept': '*/*',
                         'Referer': referer
                     }
                 else:
-                    # Третья попытка: полный набор но без Sec-Fetch
+                    # Third attempt: full set but without Sec-Fetch
                     headers = {
                         'User-Agent': user_agents[2],
                         'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8,video/*,*/*;q=0.8',
@@ -1001,9 +1015,9 @@ class Veo31VideoGenerator:
             except requests.exceptions.HTTPError as e:
                 last_error = e
                 if e.response.status_code == 403 and attempt < max_retries - 1:
-                    # Для 403 пробуем следующий подход
+                    # For 403 try next approach
                     continue
-                # Для других ошибок HTTP сразу пробрасываем
+                # For other HTTP errors immediately re-raise
                 if e.response.status_code != 403:
                     raise
             except requests.exceptions.RequestException as e:
@@ -1012,12 +1026,12 @@ class Veo31VideoGenerator:
                     continue
                 raise
 
-        # Если все попытки не удались, пробрасываем последнюю ошибку
+        # If all attempts failed, re-raise the last error
         if last_error:
             raise last_error
 
     def _resolve_media_input(self, item: Union[Dict, bytes, str, Path], default_label: str) -> Dict:
-        """Приводит вход медиа к стандартному представлению"""
+        """Converts media input to standard representation"""
         result = {
             "label": default_label,
             "content_type": None,
@@ -1047,7 +1061,7 @@ class Veo31VideoGenerator:
 
 
 if __name__ == "__main__":
-    # Пример использования
+    # Usage example
     generator = Veo31VideoGenerator()
 
     result = generator.generate_from_references(

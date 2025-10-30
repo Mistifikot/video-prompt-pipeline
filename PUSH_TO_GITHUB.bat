@@ -1,33 +1,34 @@
 @echo off
+chcp 65001 >nul
 echo ============================================
-echo Загрузка проекта на GitHub
+echo Uploading project to GitHub
 echo ============================================
 echo.
 
-echo Проверка подключения к GitHub...
+echo Checking GitHub connection...
 git remote -v
 echo.
 
-echo Загрузка кода на GitHub...
+echo Uploading code to GitHub...
 git push -u origin main
 
 if %ERRORLEVEL% EQU 0 (
     echo.
     echo ============================================
-    echo Успешно! Проект загружен на GitHub
+    echo Success! Project uploaded to GitHub
     echo ============================================
     echo.
-    echo Репозиторий: https://github.com/Mistifikot/video-prompt-pipeline
+    echo Repository: https://github.com/Mistifikot/video-prompt-pipeline
 ) else (
     echo.
     echo ============================================
-    echo Ошибка при загрузке!
+    echo Error during upload!
     echo ============================================
     echo.
-    echo Убедитесь что:
-    echo 1. Репозиторий создан на GitHub: https://github.com/Mistifikot/video-prompt-pipeline
-    echo 2. У вас есть права на запись в репозиторий
-    echo 3. Используется правильный токен доступа
+    echo Make sure that:
+    echo 1. Repository is created on GitHub: https://github.com/Mistifikot/video-prompt-pipeline
+    echo 2. You have write access to the repository
+    echo 3. Correct access token is being used
 )
 
 pause

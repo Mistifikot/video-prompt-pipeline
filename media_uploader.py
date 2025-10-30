@@ -1,4 +1,4 @@
-"""Утилиты для загрузки изображений на публичное хранилище (например, S3)."""
+"""Utilities for uploading images to public storage (e.g., S3)."""
 
 import os
 import uuid
@@ -7,21 +7,21 @@ from typing import Optional
 try:
     import boto3
     from botocore.exceptions import BotoCoreError, ClientError
-except ImportError:  # pragma: no cover - boto3 может быть опционален
+except ImportError:  # pragma: no cover - boto3 may be optional
     boto3 = None
     BotoCoreError = ClientError = Exception
 
 
 class ImageUploader:
-    """Загрузка изображений в S3-совместимое хранилище для получения публичных URL."""
+    """Upload images to S3-compatible storage to get public URLs."""
 
     def __init__(self):
         self.bucket = os.getenv("S3_UPLOAD_BUCKET")
         if not self.bucket:
-            raise RuntimeError("S3_UPLOAD_BUCKET не задан")
+            raise RuntimeError("S3_UPLOAD_BUCKET not set")
 
         if boto3 is None:
-            raise RuntimeError("boto3 не установлен. Добавьте 'boto3' в зависимости")
+            raise RuntimeError("boto3 not installed. Add 'boto3' to dependencies")
 
         self.region = os.getenv("S3_UPLOAD_REGION")
         self.prefix = os.getenv("S3_UPLOAD_PREFIX", "")
@@ -42,7 +42,7 @@ class ImageUploader:
 
     def upload_image(self, data: bytes, filename: Optional[str], content_type: Optional[str] = None) -> str:
         if not data:
-            raise ValueError("Пустые данные изображения")
+            raise ValueError("Empty image data")
 
         ext = ""
         if filename and "." in filename:
@@ -66,7 +66,7 @@ class ImageUploader:
                 **extra_args,
             )
         except (BotoCoreError, ClientError) as err:
-            raise RuntimeError(f"Ошибка загрузки изображения в S3: {err}")
+            raise RuntimeError(f"Error uploading image to S3: {err}")
 
         if self.public_domain:
             base = self.public_domain.rstrip("/")
@@ -79,18 +79,18 @@ class ImageUploader:
                 ExpiresIn=self.presign_expires
             )
         except (BotoCoreError, ClientError) as err:
-            raise RuntimeError(f"Не удалось создать presigned URL: {err}")
+            raise RuntimeError(f"Failed to create presigned URL: {err}")
 
         return presigned
 
 
 def build_image_uploader() -> Optional[ImageUploader]:
-    """Пробует создать загрузчик, возвращает None при отсутствии конфигурации."""
+    """Tries to create uploader, returns None if configuration is missing."""
     try:
         return ImageUploader()
     except RuntimeError as err:
-        # При отсутствии конфигурации просто возвращаем None, оставляя логирование вызывающему коду
-        print(f"[i] ImageUploader недоступен: {err}")
+        # If configuration missing, just return None, leaving logging to caller
+        print(f"[i] ImageUploader unavailable: {err}")
         return None
 
 

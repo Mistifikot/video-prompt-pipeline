@@ -1,5 +1,5 @@
 """
-Главный пайплайн: объединяет Агент 1 (визуальный анализатор) и Агент 2 (генератор промптов)
+Main pipeline: combines Agent 1 (visual analyzer) and Agent 2 (prompt generator)
 """
 
 import json
@@ -11,7 +11,7 @@ from agent2_prompt_generator import PromptGenerator
 
 
 class VideoPromptPipeline:
-    """Двухагентный пайплайн для автоматической генерации промптов из медиа"""
+    """Two-agent pipeline for automatic prompt generation from media"""
 
     def __init__(
         self,
@@ -22,12 +22,12 @@ class VideoPromptPipeline:
         auto_perplexity_polish: Optional[bool] = None
     ):
         """
-        Инициализация пайплайна
+        Initialize pipeline
 
         Args:
-            openai_api_key: API ключ OpenAI (для анализа и генерации)
-            gemini_api_key: API ключ Google Gemini (опционально, для анализа видео)
-            use_gemini_for_analysis: Использовать Gemini для анализа (лучше для видео)
+            openai_api_key: OpenAI API key (for analysis and generation)
+            gemini_api_key: Google Gemini API key (optional, for video analysis)
+            use_gemini_for_analysis: Use Gemini for analysis (better for video)
         """
         self.analyzer = VisualAnalyzer(
             openai_api_key=openai_api_key,
@@ -50,27 +50,27 @@ class VideoPromptPipeline:
         polish_with_perplexity: Optional[bool] = None
     ) -> Dict:
         """
-        Полный цикл обработки: анализ медиа → генерация промпта
+        Full processing cycle: media analysis → prompt generation
 
         Args:
-            media_source: URL, путь к файлу или bytes медиа
+            media_source: URL, file path or bytes media
             platform: veo3, sora2, seedream
             use_case: product_video, hero_image, gemstone_closeup, luxury_brand, general
-            content_type: MIME type (опционально, определяется автоматически)
-            return_intermediate: Возвращать промежуточный результат анализа
+            content_type: MIME type (optional, auto-detected)
+            return_intermediate: Return intermediate analysis result
 
         Returns:
-            Dict с финальным промптом и метаданными
+            Dict with final prompt and metadata
         """
         try:
-            # Агент 1: Анализ визуального контента
+            # Agent 1: Visual content analysis
             scene_description = self.analyzer.analyze(
                 media_source=media_source,
                 content_type=content_type,
                 use_gemini=self.use_gemini
             )
         except Exception as e:
-            # Fallback: если анализ не удался, создаем базовое описание
+            # Fallback: if analysis failed, create basic description
             error_msg = str(e)
             scene_description = {
                 "error": error_msg,
@@ -79,7 +79,7 @@ class VideoPromptPipeline:
             }
 
         try:
-            # Агент 2: Генерация промпта
+            # Agent 2: Prompt generation
             prompt_result = self.generator.generate(
                 scene_description=scene_description,
                 platform=platform,
@@ -87,7 +87,7 @@ class VideoPromptPipeline:
                 polish_with_perplexity=polish_with_perplexity
             )
         except Exception as e:
-            # Fallback: если генерация не удалась, создаем базовый промпт
+            # Fallback: if generation failed, create basic prompt
             error_msg = str(e)
             prompt_result = {
                 "prompt": f"[Error generating prompt: {error_msg}] Please provide a manual description of your scene.",
@@ -119,28 +119,28 @@ class VideoPromptPipeline:
         polish_with_perplexity: Optional[bool] = None
     ) -> Dict:
         """
-        Генерирует промты для нескольких платформ одновременно
+        Generates prompts for multiple platforms simultaneously
 
         Args:
-            media_source: URL, путь к файлу или bytes медиа
-            platforms: Список платформ (по умолчанию ["veo3", "sora2"])
-            use_case: Тип задачи
+            media_source: URL, file path or bytes media
+            platforms: List of platforms (default ["veo3", "sora2"])
+            use_case: Task type
             content_type: MIME type
 
         Returns:
-            Dict с промтами для каждой платформы
+            Dict with prompts for each platform
         """
         if platforms is None:
             platforms = ["veo3", "sora2"]
 
-        # Агент 1: Анализ (один раз для всех платформ)
+        # Agent 1: Analysis (once for all platforms)
         scene_description = self.analyzer.analyze(
             media_source=media_source,
             content_type=content_type,
             use_gemini=self.use_gemini
         )
 
-        # Агент 2: Генерация для всех платформ
+        # Agent 2: Generation for all platforms
         prompts_by_platform = self.generator.generate_multiple(
             scene_description=scene_description,
             platforms=platforms,
@@ -155,7 +155,7 @@ class VideoPromptPipeline:
 
 
 if __name__ == "__main__":
-    # Пример использования
+    # Usage example
     import os
 
     pipeline = VideoPromptPipeline(
@@ -164,7 +164,7 @@ if __name__ == "__main__":
         use_gemini_for_analysis=False
     )
 
-    # Пример 1: Одна платформа
+    # Example 1: Single platform
     # result = pipeline.process(
     #     media_source="https://example.com/jewelry.jpg",
     #     platform="veo3",
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     # )
     # print(json.dumps(result, indent=2, ensure_ascii=False))
 
-    # Пример 2: Несколько платформ
+    # Example 2: Multiple platforms
     # results = pipeline.process_multiple_platforms(
     #     media_source="https://example.com/jewelry_video.mp4",
     #     platforms=["veo3", "sora2"],

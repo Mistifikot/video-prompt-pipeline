@@ -156,7 +156,7 @@ class VideoImagePromptWorkflow:
             try:
                 self.kie_client = KieVeoClient(api_key=kie_api_key)
             except Exception as error:  # pragma: no cover - network errors
-                raise RuntimeError(f"Не удалось инициализировать Kie.ai клиента: {error}")
+                raise RuntimeError(f"Failed to initialize Kie.ai client: {error}")
 
         self.image_uploader: Optional[ImageUploader] = build_image_uploader()
         storage_path = os.getenv("WORKFLOW_STATE_PATH", "workflow_states.json")
@@ -239,17 +239,17 @@ class VideoImagePromptWorkflow:
     ) -> Dict[str, Any]:
         """Submits the final prompt and image URL to Kie.ai for generation."""
         if self.kie_client is None:
-            raise RuntimeError("Kie.ai клиент не инициализирован. Укажите KIE_API_KEY для генерации видео")
+            raise RuntimeError("Kie.ai client not initialized. Specify KIE_API_KEY for video generation")
 
         state = self._active_workflows.get(workflow_id)
         if state is None:
-            raise KeyError(f"Workflow с идентификатором {workflow_id} не найден")
+            raise KeyError(f"Workflow with identifier {workflow_id} not found")
 
         prompt_to_send = (user_prompt or "").strip() or state.draft_prompt
         image_url = image_url_override or state.image_reference_url
 
         if not image_url:
-            raise ValueError("Для генерации видео требуется публичный URL изображения (image_url)")
+            raise ValueError("Public image URL (image_url) required for video generation")
 
         response = self.kie_client.generate_video(
             prompt=prompt_to_send,
@@ -293,14 +293,14 @@ class VideoImagePromptWorkflow:
             if state:
                 self._active_workflows[workflow_id] = state
         if state is None:
-            raise KeyError(f"Workflow с идентификатором {workflow_id} не найден")
+            raise KeyError(f"Workflow with identifier {workflow_id} not found")
         return state
 
     def refresh_generation_status(self, workflow_id: str) -> Dict[str, Any]:
         """Checks the remote generation task and updates workflow metadata."""
         if self.kie_client is None:
             raise RuntimeError(
-                "Kie.ai клиент не инициализирован. Проверьте KIE_API_KEY для проверки статуса"
+                "Kie.ai client not initialized. Check KIE_API_KEY for status check"
             )
 
         state = self.get_workflow_state(workflow_id)
@@ -308,7 +308,7 @@ class VideoImagePromptWorkflow:
         task_id = kie_meta.get("task_id")
         if not task_id:
             raise ValueError(
-                "Workflow ещё не был отправлен на генерацию или task_id отсутствует"
+                "Workflow has not been submitted for generation yet or task_id is missing"
             )
 
         status_payload = self.kie_client.check_task_status(task_id)
@@ -347,7 +347,7 @@ class VideoImagePromptWorkflow:
         """Ensures we have both analysis data and a URL for downstream Kie.ai call."""
         if isinstance(image_source, bytes):
             if not self.image_uploader:
-                raise ValueError("Получен байтовый контент изображения, но загрузчик не настроен. Укажите S3 конфигурацию либо предоставьте публичный URL.")
+                raise ValueError("Received image byte content, but uploader not configured. Specify S3 configuration or provide public URL.")
             url = self.image_uploader.upload_image(image_source, filename="reference.jpg", content_type="image/jpeg")
             return {
                 "analysis_source": image_source,
@@ -370,7 +370,7 @@ class VideoImagePromptWorkflow:
             data = source_path.read_bytes()
             content_type = mimetypes.guess_type(source_path.name)[0] or "image/jpeg"
             if not self.image_uploader:
-                raise ValueError("Для локального изображения требуется настроенный загрузчик S3 (см. S3_UPLOAD_* переменные) либо укажите прямой URL.")
+                raise ValueError("For local image, configured S3 uploader is required (see S3_UPLOAD_* variables) or specify direct URL.")
             url = self.image_uploader.upload_image(data, filename=source_path.name, content_type=content_type)
             return {
                 "analysis_source": data,
@@ -378,7 +378,7 @@ class VideoImagePromptWorkflow:
                 "content_type": content_type,
             }
 
-        raise ValueError("Не удалось определить источник изображения. Укажите публичный URL или путь к файлу.")
+        raise ValueError("Failed to determine image source. Specify public URL or file path.")
 
     def _combine_analyses(self, video_analysis: Dict[str, Any], image_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Creates a unified scene description emphasising camera motion from video and object detail from image."""
@@ -407,9 +407,9 @@ class VideoImagePromptWorkflow:
         combined.setdefault("video_subjects", video_copy.get("subjects"))
 
         synthesis_notes = {
-            "camera_motion_from_video": "Используй ключевые кадры и поддержку камеры из video_analysis для описания движения.",
-            "object_from_image": "Основной объект, материалы и текстуры бери из reference_image_analysis.subjects.",
-            "lighting_merge_hint": "Сочетай схему освещения: если в video_analysis есть lighting, используй её как основу, уточнив детали из изображения." if video_copy.get("lighting") else "Опиши освещение, ориентируясь на изображение и общую стилистику.",
+            "camera_motion_from_video": "Use keyframes and camera support from video_analysis to describe movement.",
+            "object_from_image": "Take main object, materials and textures from reference_image_analysis.subjects.",
+            "lighting_merge_hint": "Combine lighting scheme: if video_analysis has lighting, use it as basis, refining details from image." if video_copy.get("lighting") else "Describe lighting, focusing on image and overall style.",
         }
         combined.setdefault("workflow_context", {})
         combined["workflow_context"].setdefault("instructions", synthesis_notes)

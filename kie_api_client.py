@@ -1,4 +1,4 @@
-"""Клиент для работы с Kie.ai Veo 3.1 API"""
+"""Client for working with Kie.ai Veo 3.1 API"""
 
 import os
 from typing import List, Optional, Dict, Any
@@ -7,7 +7,7 @@ import requests
 
 
 class KieVeoClient:
-    """Обертка над REST API https://api.kie.ai/api/v1/veo/generate"""
+    """Wrapper over REST API https://api.kie.ai/api/v1/veo/generate"""
 
     def __init__(
         self,
@@ -16,7 +16,7 @@ class KieVeoClient:
     ):
         self.api_key = api_key or os.getenv("KIE_API_KEY")
         if not self.api_key:
-            raise ValueError("Kie.ai API key не найден. Установите KIE_API_KEY в .env")
+            raise ValueError("Kie.ai API key not found. Set KIE_API_KEY in .env")
 
         self.base_url = (base_url or os.getenv("KIE_API_BASE_URL") or "https://api.kie.ai").rstrip("/")
 
@@ -32,27 +32,32 @@ class KieVeoClient:
         seeds: Optional[int] = None,
         watermark: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Создает задачу генерации видео через Kie.ai"""
+        """Creates video generation task via Kie.ai"""
 
-        # Очищаем и ограничиваем промпт
-        # Убираем двойные кавычки в начале и конце, если они есть
+        # Clean and limit prompt
+        # Remove double quotes at start and end if present
         cleaned_prompt = prompt.strip()
         if cleaned_prompt.startswith('"') and cleaned_prompt.endswith('"'):
             cleaned_prompt = cleaned_prompt[1:-1]
 
-        # Ограничиваем длину промпта (примерно 1000 символов для безопасности)
-        # Kie.ai может иметь ограничения на длину промпта
-        MAX_PROMPT_LENGTH = 800
+        # Limit prompt length (Kie.ai supports longer prompts, but we limit for safety)
+        # Based on testing, Kie.ai can handle at least 2000-3000 characters
+        MAX_PROMPT_LENGTH = 2500
 
         if len(cleaned_prompt) > MAX_PROMPT_LENGTH:
-            print(f"[WARNING] Промпт слишком длинный ({len(cleaned_prompt)} символов), обрезаем до {MAX_PROMPT_LENGTH}")
-            # Обрезаем до последнего предложения в пределах лимита
+            print(f"[WARNING] Prompt too long ({len(cleaned_prompt)} characters), truncating to {MAX_PROMPT_LENGTH}")
+            # Try to truncate at paragraph boundary first (double newline)
             truncated = cleaned_prompt[:MAX_PROMPT_LENGTH]
-            last_period = truncated.rfind('.')
-            if last_period > MAX_PROMPT_LENGTH * 0.7:  # Если точка находится в разумных пределах
-                cleaned_prompt = truncated[:last_period + 1]
+            last_paragraph = truncated.rfind('\n\n')
+            if last_paragraph > MAX_PROMPT_LENGTH * 0.5:  # If paragraph break is within reasonable range
+                cleaned_prompt = truncated[:last_paragraph].strip()
             else:
-                cleaned_prompt = truncated
+                # Fallback: truncate to last sentence within limit
+                last_period = truncated.rfind('.')
+                if last_period > MAX_PROMPT_LENGTH * 0.7:  # If period is within reasonable range
+                    cleaned_prompt = truncated[:last_period + 1]
+                else:
+                    cleaned_prompt = truncated
 
         payload: Dict[str, Any] = {
             "prompt": cleaned_prompt,
@@ -67,7 +72,7 @@ class KieVeoClient:
         if generation_type:
             payload["generationType"] = generation_type
         elif image_urls:
-            # У Kie для imageUrls требуется режим REFERENCE_2_VIDEO
+            # Kie requires REFERENCE_2_VIDEO mode for imageUrls
             payload["generationType"] = "REFERENCE_2_VIDEO"
 
         if callback_url:
@@ -91,7 +96,7 @@ class KieVeoClient:
             response.raise_for_status()
             return response.json()
         except requests.HTTPError as e:
-            # Улучшенная обработка ошибок для отладки
+            # Improved error handling for debugging
             error_detail = f"HTTP {response.status_code}"
             try:
                 error_json = response.json()
@@ -99,43 +104,43 @@ class KieVeoClient:
             except:
                 error_detail += f": {response.text[:500]}"
 
-            print(f"[ERROR] Kie.ai API ошибка: {error_detail}")
-            print(f"[DEBUG] Payload отправлен (prompt length: {len(payload.get('prompt', ''))}): {payload}")
+            print(f"[ERROR] Kie.ai API error: {error_detail}")
+            print(f"[DEBUG] Payload sent (prompt length: {len(payload.get('prompt', ''))}): {payload}")
 
-            # Бросаем исключение с деталями
+            # Raise exception with details
             raise requests.HTTPError(f"Kie.ai API error: {error_detail}")
         except requests.RequestException as e:
-            print(f"[ERROR] Kie.ai запрос не удался: {e}")
+            print(f"[ERROR] Kie.ai request failed: {e}")
             raise
 
     def check_task_status(self, task_id: str) -> Dict[str, Any]:
         """
-        Проверяет статус задачи генерации видео по Task ID и возвращает видео URL если готово
+        Checks video generation task status by Task ID and returns video URL if ready
 
-        Согласно документации Kie.ai, есть два способа получить результат:
-        1. Callback URL (рекомендуется) - система автоматически отправляет результат
-        2. Polling через "Get Veo3.1 Video Details" endpoint (точный URL не указан в документации)
+        According to Kie.ai documentation, there are two ways to get result:
+        1. Callback URL (recommended) - system automatically sends result
+        2. Polling via "Get Veo3.1 Video Details" endpoint (exact URL not specified in documentation)
 
-        Если endpoint для проверки статуса недоступен, пробуем проверить доступность видео напрямую.
+        If status check endpoint is unavailable, try checking video availability directly.
         """
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
 
-        # Согласно документации, endpoint может быть:
+        # According to documentation, endpoint may be:
         # - /api/v1/veo/detail?taskId={task_id}
         # - /api/v1/veo/detail/{task_id}
-        # Но точный формат не указан, пробуем разные варианты
+        # But exact format not specified, try different variants
         endpoints = [
-            # Вариант 1: Query параметр (согласно документации "Get Veo3.1 Video Details")
+            # Variant 1: Query parameter (according to "Get Veo3.1 Video Details" documentation)
             f"{self.base_url}/api/v1/veo/detail?taskId={task_id}",
-            # Вариант 2: Path параметр
+            # Variant 2: Path parameter
             f"{self.base_url}/api/v1/veo/detail/{task_id}",
-            # Вариант 3: Без /api
+            # Variant 3: Without /api
             f"{self.base_url}/v1/veo/detail?taskId={task_id}",
             f"{self.base_url}/v1/veo/detail/{task_id}",
-            # Вариант 4: Альтернативные варианты (старые, на случай если API изменился)
+            # Variant 4: Alternative variants (old, in case API changed)
             f"{self.base_url}/api/v1/veo/task/{task_id}",
             f"{self.base_url}/v1/video/task/{task_id}",
             f"{self.base_url}/api/v1/video/task/{task_id}",
@@ -148,18 +153,18 @@ class KieVeoClient:
         for url in endpoints:
             tried_endpoints.append(url)
             try:
-                print(f"[i] Пробую endpoint: {url}")
+                print(f"[i] Trying endpoint: {url}")
                 response = requests.get(url, headers=headers, timeout=30)
                 last_response = response
 
-                print(f"[i] Ответ: HTTP {response.status_code}")
+                print(f"[i] Response: HTTP {response.status_code}")
 
                 if response.status_code == 200:
-                    print(f"[OK] Status endpoint работает: {url}")
+                    print(f"[OK] Status endpoint works: {url}")
                     data = response.json()
 
-                    # Логируем полный ответ для отладки (первые 500 символов)
-                    print(f"[DEBUG] Полный ответ API: {str(data)[:500]}")
+                    # Log full response for debugging (first 500 characters)
+                    print(f"[DEBUG] Full API response: {str(data)[:500]}")
 
                     result = {
                         "status": data.get("status", "unknown"),
@@ -167,10 +172,10 @@ class KieVeoClient:
                         "raw_response": data
                     }
 
-                    # Извлекаем video_url из разных возможных мест в ответе
+                    # Extract video_url from different possible locations in response
                     video_url = None
                     if isinstance(data, dict):
-                        # Формат из callback (согласно документации):
+                        # Format from callback (according to documentation):
                         # {
                         #   "code": 200,
                         #   "data": {
@@ -183,21 +188,47 @@ class KieVeoClient:
                         #   }
                         # }
 
-                        # Вариант 1: data.data.info.resultUrls (стандартный формат callback)
+                        # Variant 1: data.data.info.resultUrls (nested data structure)
                         if "data" in data and isinstance(data["data"], dict):
+                            nested_data = data["data"].get("data", {})
+                            if isinstance(nested_data, dict):
+                                info = nested_data.get("info", {})
+                                if isinstance(info, dict):
+                                    result_urls = info.get("resultUrls", [])
+                                    if isinstance(result_urls, list) and len(result_urls) > 0:
+                                        video_url = result_urls[0]
+                                    elif isinstance(result_urls, str):
+                                        video_url = result_urls
+
+                        # Variant 1b: data.data.info.resultUrls (single data level - standard callback format)
+                        if not video_url and "data" in data and isinstance(data["data"], dict):
                             info = data["data"].get("info", {})
                             if isinstance(info, dict):
                                 result_urls = info.get("resultUrls", [])
                                 if isinstance(result_urls, list) and len(result_urls) > 0:
                                     video_url = result_urls[0]
+                                elif isinstance(result_urls, str):
+                                    video_url = result_urls
 
-                        # Вариант 2: data.data.resultUrls (без info)
+                        # Variant 2: data.data.resultUrls (nested data without info)
+                        if not video_url and "data" in data and isinstance(data["data"], dict):
+                            nested_data = data["data"].get("data", {})
+                            if isinstance(nested_data, dict):
+                                result_urls = nested_data.get("resultUrls", [])
+                                if isinstance(result_urls, list) and len(result_urls) > 0:
+                                    video_url = result_urls[0]
+                                elif isinstance(result_urls, str):
+                                    video_url = result_urls
+
+                        # Variant 2b: data.data.resultUrls (single data level without info)
                         if not video_url and "data" in data and isinstance(data["data"], dict):
                             result_urls = data["data"].get("resultUrls", [])
                             if isinstance(result_urls, list) and len(result_urls) > 0:
                                 video_url = result_urls[0]
+                            elif isinstance(result_urls, str):
+                                video_url = result_urls
 
-                        # Вариант 3: data.result.video_url
+                        # Variant 3: data.result.video_url
                         if not video_url and "result" in data:
                             result_obj = data["result"]
                             if isinstance(result_obj, dict):
@@ -205,11 +236,11 @@ class KieVeoClient:
                             elif isinstance(result_obj, str) and result_obj.startswith("http"):
                                 video_url = result_obj
 
-                        # Вариант 4: data.video_url (прямо в корне)
+                        # Variant 4: data.video_url (directly in root)
                         if not video_url:
                             video_url = data.get("video_url") or data.get("videoUrl") or data.get("video")
 
-                        # Вариант 5: Ищем любую ссылку на tempfile.aiquickdraw.com через regex
+                        # Variant 5: Search for any link to tempfile.aiquickdraw.com via regex
                         if not video_url:
                             import re
                             json_str = str(data)
@@ -221,107 +252,107 @@ class KieVeoClient:
                             for pattern in video_patterns:
                                 matches = re.findall(pattern, json_str)
                                 if matches:
-                                    # Берем первый найденный URL и проверяем его доступность
+                                    # Take first found URL and check its availability
                                     candidate_url = matches[0]
                                     try:
-                                        # Быстрая проверка доступности URL
+                                        # Quick URL availability check
                                         check_response = requests.head(candidate_url, timeout=2, allow_redirects=True)
                                         if check_response.status_code == 200:
                                             video_url = candidate_url
-                                            print(f"[i] Найдена доступная ссылка на видео через regex: {video_url}")
+                                            print(f"[i] Found available video link via regex: {video_url}")
                                             break
                                     except:
-                                        # Если проверка не удалась, все равно берем URL (может быть временная проблема)
+                                        # If check failed, still take URL (may be temporary issue)
                                         video_url = candidate_url
-                                        print(f"[i] Найдена ссылка на видео через regex (проверка недоступна): {video_url}")
+                                        print(f"[i] Found video link via regex (check unavailable): {video_url}")
                                         break
 
                     if video_url:
-                        # Дополнительная проверка доступности video_url перед возвратом
+                        # Additional video_url availability check before returning
                         try:
                             verify_response = requests.head(video_url, timeout=2, allow_redirects=True)
                             if verify_response.status_code != 200:
-                                print(f"[!] Video URL найден, но недоступен (HTTP {verify_response.status_code}): {video_url}")
-                                # Все равно возвращаем URL, так как он может стать доступным позже
+                                print(f"[!] Video URL found but unavailable (HTTP {verify_response.status_code}): {video_url}")
+                                # Still return URL as it may become available later
                         except:
-                            print(f"[i] Video URL найден, но проверка доступности не удалась: {video_url}")
-                            # Продолжаем, так как это может быть временная проблема сети
+                            print(f"[i] Video URL found but availability check failed: {video_url}")
+                            # Continue as this may be temporary network issue
 
                         result["video_url"] = video_url
                         result["status"] = "completed"
-                        print(f"[OK] Видео готово! URL: {video_url}")
+                        print(f"[OK] Video ready! URL: {video_url}")
                     else:
-                        # Проверяем code в ответе
+                        # Check code in response
                         code = data.get("code")
                         if code == 200:
                             result["status"] = "completed"
-                            print(f"[i] Статус код 200, но video_url не найден в ответе")
+                            print(f"[i] Status code 200, but video_url not found in response")
                         elif code:
                             result["status"] = "failed" if code >= 400 else "processing"
 
                     return result
                 elif response.status_code == 404:
-                    print(f"[i] Endpoint {url} вернул 404, пробую следующий...")
+                    print(f"[i] Endpoint {url} returned 404, trying next...")
                     continue
                 elif response.status_code == 401:
                     error_text = response.text[:200]
-                    print(f"[!] Endpoint {url} вернул 401 (Unauthorized): {error_text}")
+                    print(f"[!] Endpoint {url} returned 401 (Unauthorized): {error_text}")
                     continue
                 else:
                     error_text = response.text[:500]
-                    print(f"[!] Endpoint {url} вернул {response.status_code}: {error_text}")
-                    # Если не 404, возможно endpoint существует но формат неправильный
+                    print(f"[!] Endpoint {url} returned {response.status_code}: {error_text}")
+                    # If not 404, endpoint may exist but format is wrong
                     continue
             except requests.RequestException as e:
                 last_error = e
-                print(f"[!] Ошибка запроса к {url}: {e}")
+                print(f"[!] Request error to {url}: {e}")
                 continue
 
-        # Если все endpoints вернули 404, пробуем альтернативный подход:
-        # Проверяем доступность видео напрямую через известный формат URL
-        print(f"[i] Все endpoints вернули 404, пробую проверить доступность видео напрямую...")
+        # If all endpoints returned 404, try alternative approach:
+        # Check video availability directly via known URL format
+        print(f"[i] All endpoints returned 404, trying to check video availability directly...")
 
-        # Формат URL: https://tempfile.aiquickdraw.com/v/{task_id}_{timestamp}.mp4
-        # Пробуем проверить доступность с текущим timestamp и несколькими вариантами вокруг
+        # URL format: https://tempfile.aiquickdraw.com/v/{task_id}_{timestamp}.mp4
+        # Try checking availability with current timestamp and several variants around it
         import time
         current_timestamp = int(time.time())
 
-        # Пробуем несколько вариантов timestamp:
-        # - Текущее время и несколько минут назад (видео могло быть сгенерировано недавно)
-        # - Проверяем по 5-минутным интервалам за последние 2 часа
+        # Try several timestamp variants:
+        # - Current time and several minutes ago (video may have been generated recently)
+        # - Check at 5-minute intervals for last 2 hours
         test_timestamps = []
-        for offset in range(0, 7200, 300):  # Каждые 5 минут за последние 2 часа
+        for offset in range(0, 7200, 300):  # Every 5 minutes for last 2 hours
             test_timestamps.append(current_timestamp - offset)
 
-        # Также добавляем более точную проверку последних 10 минут (каждую минуту)
+        # Also add more precise check for last 10 minutes (every minute)
         for offset in range(0, 600, 60):
             test_timestamps.append(current_timestamp - offset)
 
-        # Убираем дубликаты и сортируем
+        # Remove duplicates and sort
         test_timestamps = sorted(set(test_timestamps))
 
         for test_timestamp in test_timestamps:
             test_url = f"https://tempfile.aiquickdraw.com/v/{task_id}_{test_timestamp}.mp4"
 
             try:
-                # Пробуем HEAD запрос
+                # Try HEAD request
                 head_response = requests.head(test_url, timeout=3, allow_redirects=True)
                 if head_response.status_code == 200:
-                    print(f"[OK] Видео найдено напрямую: {test_url}")
+                    print(f"[OK] Video found directly: {test_url}")
                     return {
                         "status": "completed",
                         "task_id": task_id,
                         "video_url": test_url,
                         "method": "direct_check"
                     }
-                # Если HEAD не поддерживается, пробуем GET с минимальным чтением
+                # If HEAD not supported, try GET with minimal reading
                 elif head_response.status_code == 405:  # Method Not Allowed
                     get_response = requests.get(test_url, timeout=3, stream=True)
                     if get_response.status_code == 200:
-                        # Читаем только первые байты для проверки
+                        # Read only first bytes for check
                         get_response.raw.read(1024)
                         get_response.close()
-                        print(f"[OK] Видео найдено через GET: {test_url}")
+                        print(f"[OK] Video found via GET: {test_url}")
                         return {
                             "status": "completed",
                             "task_id": task_id,
@@ -331,27 +362,27 @@ class KieVeoClient:
             except requests.exceptions.RequestException:
                 continue
             except Exception as e:
-                # Игнорируем другие ошибки
+                # Ignore other errors
                 continue
 
-        # Если не нашли через прямой доступ, возвращаем ошибку
+        # If not found via direct access, return error
         error_messages = []
         if last_response:
-            error_messages.append(f"Последний ответ: HTTP {last_response.status_code}")
+            error_messages.append(f"Last response: HTTP {last_response.status_code}")
             if last_response.text:
-                error_messages.append(f"Ответ сервера: {last_response.text[:300]}")
+                error_messages.append(f"Server response: {last_response.text[:300]}")
         if last_error:
-            error_messages.append(f"Ошибка запроса: {last_error}")
+            error_messages.append(f"Request error: {last_error}")
 
-        error_detail = ". ".join(error_messages) if error_messages else "Все endpoints вернули 404"
-        error_detail += f". Пробовал endpoints: {len(tried_endpoints)} вариантов. Прямая проверка видео также не дала результата."
+        error_detail = ". ".join(error_messages) if error_messages else "All endpoints returned 404"
+        error_detail += f". Tried endpoints: {len(tried_endpoints)} variants. Direct video check also gave no result."
 
-        # Не бросаем исключение, возвращаем статус "processing" чтобы интерфейс продолжал проверку
+        # Don't raise exception, return "processing" status so interface continues checking
         return {
             "status": "processing",
             "task_id": task_id,
             "error": error_detail,
-            "note": "Endpoint для проверки статуса недоступен. Рекомендуется использовать callback URL или проверять вручную на https://app.kie.ai"
+            "note": "Status check endpoint unavailable. Recommended to use callback URL or check manually at https://app.kie.ai"
         }
 
 

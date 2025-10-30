@@ -1,34 +1,34 @@
-# Получение видео из Kie.ai после генерации
+# Retrieving Videos from Kie.ai After Generation
 
-## Что было сделано
+## What was done
 
-Обновлена система для автоматического получения готового видео из Kie.ai API после завершения генерации.
+Updated the system to automatically retrieve ready videos from Kie.ai API after generation completion.
 
-## Изменения
+## Changes
 
 ### 1. `kie_api_client.py`
-- ✅ Исправлен endpoint для проверки статуса: `https://api.kie.ai/v1/video/task/{task_id}`
-- ✅ Добавлен парсинг ответа для извлечения `video_url` из разных форматов ответа
-- ✅ Метод `check_task_status()` теперь возвращает структурированный ответ с `video_url` если видео готово
+- ✅ Fixed status check endpoint: `https://api.kie.ai/v1/video/task/{task_id}`
+- ✅ Added response parsing to extract `video_url` from different response formats
+- ✅ `check_task_status()` method now returns structured response with `video_url` if video is ready
 
 ### 2. `veo31_generator.py`
-- ✅ Добавлен метод `check_kie_status()` для проверки статуса Kie.ai
-- ✅ Обновлен метод `check_status()` с поддержкой параметра `provider`
+- ✅ Added `check_kie_status()` method for checking Kie.ai status
+- ✅ Updated `check_status()` method with support for `provider` parameter
 
 ### 3. `api_server.py`
-- ✅ Обновлен endpoint `/veo31/kie-status/{task_id}` для возврата `video_url` в структурированном формате
+- ✅ Updated `/veo31/kie-status/{task_id}` endpoint to return `video_url` in structured format
 
 ### 4. `veo31_interface.html`
-- ✅ Улучшена логика автоматической проверки статуса
-- ✅ Добавлена поддержка получения `video_url` из обновленного формата ответа
-- ✅ Автоматическое отображение видео плеера когда видео готово
-- ✅ Улучшена обработка различных статусов (`processing`, `completed`, `failed`)
+- ✅ Improved automatic status check logic
+- ✅ Added support for getting `video_url` from updated response format
+- ✅ Automatic video player display when video is ready
+- ✅ Improved handling of different statuses (`processing`, `completed`, `failed`)
 
-## Использование
+## Usage
 
-### Через API
+### Via API
 
-#### 1. Запуск генерации
+#### 1. Start generation
 ```bash
 curl -X POST "http://localhost:8000/veo31/generate-from-urls" \
   -F "reference_image_urls=https://images.unsplash.com/photo-1656543802898-41c8c46683a7" \
@@ -38,7 +38,7 @@ curl -X POST "http://localhost:8000/veo31/generate-from-urls" \
   -F "aspect_ratio=16:9"
 ```
 
-Ответ будет содержать `task_id`:
+Response will contain `task_id`:
 ```json
 {
   "step3_video_generation": {
@@ -49,12 +49,12 @@ curl -X POST "http://localhost:8000/veo31/generate-from-urls" \
 }
 ```
 
-#### 2. Проверка статуса и получение видео
+#### 2. Check status and get video
 ```bash
 curl "http://localhost:8000/veo31/kie-status/88513be422a2f971886273b32867fd6f"
 ```
 
-Ответ когда видео готово:
+Response when video is ready:
 ```json
 {
   "provider": "kie.ai",
@@ -64,18 +64,18 @@ curl "http://localhost:8000/veo31/kie-status/88513be422a2f971886273b32867fd6f"
 }
 ```
 
-### Через веб-интерфейс
+### Via Web Interface
 
-1. Откройте `veo31_interface.html` или `http://localhost:8000/veo31`
-2. Загрузите изображения или укажите URL
-3. Выберите "Использовать Kie.ai API"
-4. Нажмите "Сгенерировать видео"
-5. Интерфейс автоматически будет проверять статус каждые 10 секунд
-6. Когда видео готово, оно автоматически отобразится в плеере
+1. Open `veo31_interface.html` or `http://localhost:8000/veo31`
+2. Upload images or specify URLs
+3. Select "Use Kie.ai API"
+4. Click "Generate video"
+5. Interface will automatically check status every 10 seconds
+6. When video is ready, it will automatically display in the player
 
-## Формат ответа от Kie.ai API
+## Kie.ai API Response Format
 
-Согласно документации, endpoint `/v1/video/task/{task_id}` возвращает:
+According to documentation, endpoint `/v1/video/task/{task_id}` returns:
 
 ```json
 {
@@ -86,54 +86,54 @@ curl "http://localhost:8000/veo31/kie-status/88513be422a2f971886273b32867fd6f"
 }
 ```
 
-Наш код поддерживает также альтернативные форматы:
-- `status.video_url` (прямо в корне)
-- `status.data.video_url` (через data)
+Our code also supports alternative formats:
+- `status.video_url` (directly in root)
+- `status.data.video_url` (via data)
 - `status.result.videoUrl` (camelCase)
-- `status.result.video` (просто "video")
-- `status.url` (если это видео ссылка)
-- Автоматический поиск ссылок на `tempfile.aiquickdraw.com` через regex
+- `status.result.video` (just "video")
+- `status.url` (if it's a video link)
+- Automatic search for links to `tempfile.aiquickdraw.com` via regex
 
-**Формат ссылки на видео:**
-Видео от Kie.ai обычно возвращается в формате:
+**Video link format:**
+Videos from Kie.ai are usually returned in format:
 ```
 https://tempfile.aiquickdraw.com/v/{hash}_{timestamp}.mp4
 ```
 
-Эти ссылки доступны напрямую и могут быть использованы в `<video>` тегах или для скачивания.
+These links are directly accessible and can be used in `<video>` tags or for downloading.
 
-## Автоматическая проверка статуса
+## Automatic Status Check
 
-Веб-интерфейс автоматически проверяет статус:
-- **Каждые 10 секунд** для Kie.ai
-- **Каждые 5 секунд** для Google Veo
+Web interface automatically checks status:
+- **Every 10 seconds** for Kie.ai
+- **Every 5 seconds** for Google Veo
 
-Проверка прекращается когда:
-- Видео готово (`status: "completed"` и есть `video_url`)
-- Произошла ошибка (`status: "failed"` или `status: "error"`)
+Checking stops when:
+- Video is ready (`status: "completed"` and `video_url` exists)
+- Error occurred (`status: "failed"` or `status: "error"`)
 
 ## Troubleshooting
 
-### Видео не отображается
-1. Проверьте что `task_id` правильный
-2. Убедитесь что генерация завершена на платформе Kie.ai
-3. Проверьте консоль браузера на ошибки
-4. Проверьте логи сервера на наличие `[OK] Видео готово!`
+### Video not displaying
+1. Check that `task_id` is correct
+2. Make sure generation is completed on Kie.ai platform
+3. Check browser console for errors
+4. Check server logs for `[OK] Video ready!`
 
-### Endpoint не работает
-Если endpoint `/v1/video/task/{task_id}` не работает:
-- Проверьте что API ключ правильный
-- Проверьте что base_url правильный: `https://api.kie.ai`
-- Проверьте документацию Kie.ai на изменения в API
+### Endpoint not working
+If endpoint `/v1/video/task/{task_id}` doesn't work:
+- Check that API key is correct
+- Check that base_url is correct: `https://api.kie.ai`
+- Check Kie.ai documentation for API changes
 
-### Статус показывает "unknown"
-Это означает что endpoint не найден. Система продолжит проверку, но вы можете:
-- Проверить статус вручную на https://app.kie.ai
-- Использовать task_id из ответа для ручной проверки
+### Status shows "unknown"
+This means endpoint was not found. System will continue checking, but you can:
+- Check status manually at https://app.kie.ai
+- Use task_id from response for manual check
 
-## Пример успешного workflow
+## Example Successful Workflow
 
-1. **Генерация запущена:**
+1. **Generation started:**
    ```json
    {
      "step3_video_generation": {
@@ -144,7 +144,7 @@ https://tempfile.aiquickdraw.com/v/{hash}_{timestamp}.mp4
    }
    ```
 
-2. **Проверка статуса (видео еще генерируется):**
+2. **Status check (video still generating):**
    ```json
    {
      "status": "processing",
@@ -152,7 +152,7 @@ https://tempfile.aiquickdraw.com/v/{hash}_{timestamp}.mp4
    }
    ```
 
-3. **Видео готово:**
+3. **Video ready:**
    ```json
    {
      "status": "completed",
@@ -161,8 +161,7 @@ https://tempfile.aiquickdraw.com/v/{hash}_{timestamp}.mp4
    }
    ```
 
-4. **В интерфейсе автоматически:**
-   - Останавливается проверка статуса
-   - Отображается видео плеер
-   - Появляются кнопки "Скачать" и "Копировать ссылку"
-
+4. **In interface automatically:**
+   - Status checking stops
+   - Video player displays
+   - "Download" and "Copy link" buttons appear

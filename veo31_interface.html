@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Veo 3.1 - Генерация видео по образцам</title>
+    <title>Veo 3.1 - Video Generation from Samples</title>
     <style>
         * {
             margin: 0;
@@ -317,77 +317,77 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎬 Veo 3.1 - Генерация видео по образцам</h1>
-        <p class="subtitle">Загрузите 3 изображения + видео-референс (опционально) → Получите промпт → Сгенерируйте видео</p>
+        <h1>🎬 Veo 3.1 - Video Generation from Samples</h1>
+        <p class="subtitle">Upload 3 images + video reference (optional) → Get prompt → Generate video</p>
 
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('upload')">Загрузка файлов</button>
-            <button class="tab" onclick="switchTab('urls')">Через URL</button>
+            <button class="tab active" onclick="switchTab('upload')">File Upload</button>
+            <button class="tab" onclick="switchTab('urls')">Via URL</button>
         </div>
 
         <div class="step-indicator">
             <div class="step active" id="step1">
                 <div class="step-number">1</div>
-                <div>Загрузка референсов</div>
+                <div>Upload References</div>
             </div>
             <div class="step" id="step2">
                 <div class="step-number">2</div>
-                <div>Анализ референсов</div>
+                <div>Analyze References</div>
             </div>
             <div class="step" id="step3">
                 <div class="step-number">3</div>
-                <div>Редактирование промпта</div>
+                <div>Edit Prompt</div>
             </div>
             <div class="step" id="step4">
                 <div class="step-number">4</div>
-                <div>Генерация видео</div>
+                <div>Generate Video</div>
             </div>
         </div>
 
-        <!-- Вкладка загрузки файлов -->
+        <!-- File Upload Tab -->
         <div id="upload-tab" class="tab-content active">
             <form id="veo31Form">
                 <div class="form-group">
-                    <label>Референсные изображения (минимум 1, максимум 3):</label>
+                    <label>Reference Images (minimum 1, maximum 3):</label>
                     <div class="image-upload-group">
                         <div class="image-upload-item" id="img1-upload" onclick="document.getElementById('img1').click()">
                             <input type="file" id="img1" accept="image/*" onchange="previewImage(this, 'img1-preview', 'img1-upload')">
                             <div id="img1-preview"></div>
-                            <div>Изображение 1 * (нажмите для выбора)</div>
+                            <div>Image 1 * (click to select)</div>
                         </div>
                         <div class="image-upload-item" id="img2-upload" onclick="document.getElementById('img2').click()">
                             <input type="file" id="img2" accept="image/*" onchange="previewImage(this, 'img2-preview', 'img2-upload')">
                             <div id="img2-preview"></div>
-                            <div>Изображение 2 (нажмите для выбора)</div>
+                            <div>Image 2 (click to select)</div>
                         </div>
                         <div class="image-upload-item" id="img3-upload" onclick="document.getElementById('img3').click()">
                             <input type="file" id="img3" accept="image/*" onchange="previewImage(this, 'img3-preview', 'img3-upload')">
                             <div id="img3-preview"></div>
-                            <div>Изображение 3 (нажмите для выбора)</div>
+                            <div>Image 3 (click to select)</div>
                         </div>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label>Видео-референс (опционально):</label>
+                    <label>Video Reference (optional):</label>
                     <div style="margin-bottom: 10px;">
                         <select id="videoRefType" onchange="toggleVideoRefType()" style="width: auto; display: inline-block; margin-right: 10px;">
-                            <option value="file">Загрузить файл</option>
-                            <option value="url">Указать URL</option>
+                            <option value="file">Upload File</option>
+                            <option value="url">Specify URL</option>
                         </select>
                     </div>
                     <div id="videoRefFileContainer">
                         <input type="file" id="videoRef" accept="video/*">
-                        <small>Для анализа стиля и движения</small>
+                        <small>For style and movement analysis</small>
                     </div>
                     <div id="videoRefUrlContainer" style="display: none;">
                         <input type="text" id="videoRefUrl" placeholder="https://example.com/reference.mp4">
-                        <small>URL видео для анализа стиля и движения</small>
+                        <small>Video URL for style and movement analysis</small>
                     </div>
                 </div>
 
                 <div class="form-group">
-                        <label for="aspectRatio">Соотношение сторон:</label>
+                        <label for="aspectRatio">Aspect Ratio:</label>
                         <select id="aspectRatio">
                             <option value="16:9">16:9</option>
                             <option value="9:16">9:16</option>
@@ -395,48 +395,48 @@
                         <option value="4:3">4:3</option>
                         <option value="21:9">21:9</option>
                         </select>
-                    <small>Veo всегда генерирует видео длительностью 8 секунд, качество veo3_fast</small>
+                    <small>Veo always generates 8-second videos with veo3_fast quality</small>
                 </div>
 
                 <div class="form-group">
-                    <label for="additionalPrompt">Дополнительные инструкции (опционально):</label>
-                    <input type="text" id="additionalPrompt" placeholder="Дополнительные требования к видео">
+                    <label for="additionalPrompt">Additional Instructions (optional):</label>
+                    <input type="text" id="additionalPrompt" placeholder="Additional video requirements">
                 </div>
 
                 <div class="form-group">
-                    <label>Опции генерации:</label>
+                    <label>Generation Options:</label>
                     <div class="toggle-row">
                         <label>
                             <input type="checkbox" id="preferKie">
-                            <span>Использовать Kie.ai API (если доступен)</span>
+                            <span>Use Kie.ai API (if available)</span>
                         </label>
                         <label>
                             <input type="checkbox" id="polishPerplexity" checked>
-                            <span>Полировать промт через Perplexity</span>
+                            <span>Polish prompt via Perplexity</span>
                         </label>
                     </div>
-                    <small>Если изображения загружаются с компьютера, для Kie.ai нужны публичные URL. Иначе будет использован Google Veo или вернётся только промпт.</small>
+                    <small>If images are uploaded from computer, Kie.ai needs public URLs. Otherwise Google Veo will be used or only prompt will be returned.</small>
                 </div>
 
-                <button type="submit" class="btn" id="submitBtn">🚀 Сгенерировать видео в Veo 3.1</button>
+                <button type="submit" class="btn" id="submitBtn">🚀 Generate Video in Veo 3.1</button>
             </form>
         </div>
 
-        <!-- Вкладка URL -->
+        <!-- URL Tab -->
         <div id="urls-tab" class="tab-content">
             <form id="veo31UrlForm">
                 <div class="form-group">
-                    <label for="imageUrls">URL референсных изображений (минимум 1, максимум 3, через запятую):</label>
+                    <label for="imageUrls">Reference Image URLs (minimum 1, maximum 3, comma-separated):</label>
                     <input type="text" id="imageUrls" placeholder="https://example.com/img1.jpg, https://example.com/img2.jpg, https://example.com/img3.jpg" required>
                 </div>
 
                 <div class="form-group">
-                    <label for="videoRefUrl">URL видео-референса (опционально):</label>
+                    <label for="videoRefUrl">Video Reference URL (optional):</label>
                     <input type="text" id="videoRefUrl" placeholder="https://example.com/reference.mp4">
                 </div>
 
                     <div class="form-group">
-                        <label for="aspectRatioUrl">Соотношение сторон:</label>
+                        <label for="aspectRatioUrl">Aspect Ratio:</label>
                         <select id="aspectRatioUrl">
                             <option value="16:9">16:9</option>
                             <option value="9:16">9:16</option>
@@ -444,41 +444,41 @@
                         <option value="4:3">4:3</option>
                         <option value="21:9">21:9</option>
                         </select>
-                    <small>Veo всегда генерирует видео длительностью 8 секунд, качество veo3_fast</small>
+                    <small>Veo always generates 8-second videos with veo3_fast quality</small>
                 </div>
 
                 <div class="form-group">
-                    <label>Опции генерации:</label>
+                    <label>Generation Options:</label>
                     <div class="toggle-row">
                         <label>
                             <input type="checkbox" id="preferKieUrl" checked>
-                            <span>Использовать Kie.ai API</span>
+                            <span>Use Kie.ai API</span>
                         </label>
                         <label>
                             <input type="checkbox" id="polishPerplexityUrl" checked>
-                            <span>Полировать промт через Perplexity</span>
+                            <span>Polish prompt via Perplexity</span>
                         </label>
                     </div>
                 </div>
 
-                <button type="submit" class="btn" id="submitUrlBtn">🚀 Сгенерировать видео в Veo 3.1</button>
+                <button type="submit" class="btn" id="submitUrlBtn">🚀 Generate Video in Veo 3.1</button>
             </form>
         </div>
 
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p id="loadingText">Обработка...</p>
+            <p id="loadingText">Processing...</p>
         </div>
 
         <div class="result" id="result">
-            <h2>Результат</h2>
+            <h2>Result</h2>
             <div id="resultContent"></div>
         </div>
     </div>
 
     <script>
-        // Конфигурация для отладки (можно отключить для продакшн)
-        const DEBUG_MODE = false; // Установите в true для отладки
+        // Debug configuration (can be disabled for production)
+        const DEBUG_MODE = false; // Set to true for debugging
 
         function debugLog(...args) {
             if (DEBUG_MODE) {
@@ -494,7 +494,7 @@
             settings: null
         };
 
-        // Переменные для отслеживания статуса генерации
+        // Variables for tracking generation status
         let statusCheckInterval = null;
         let currentTaskId = null;
         let currentProvider = null;
@@ -506,12 +506,12 @@
             if (tabName === 'upload') {
                 document.querySelector('.tab:nth-child(1)').classList.add('active');
                 document.getElementById('upload-tab').classList.add('active');
-                // Очищаем urlSettings при переключении на загрузку файлов
+                // Clear urlSettings when switching to file upload
                 selectedFiles.urlSettings = null;
             } else {
                 document.querySelector('.tab:nth-child(2)').classList.add('active');
                 document.getElementById('urls-tab').classList.add('active');
-                // Очищаем settings при переключении на URL
+                // Clear settings when switching to URL
                 selectedFiles.settings = null;
             }
         }
@@ -541,13 +541,13 @@
                     document.getElementById(uploadId).classList.add('has-image');
                 };
                 reader.onerror = () => {
-                    console.error('Ошибка чтения файла');
+                    console.error('File read error');
                 };
                 reader.readAsDataURL(file);
             }
         }
 
-        // Убираем всплытие события при клике на контейнер
+        // Prevent event bubbling on container click
         document.querySelectorAll('.image-upload-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 if (e.target.tagName !== 'INPUT') {
@@ -576,11 +576,11 @@
 
             const img1 = document.getElementById('img1').files[0] || selectedFiles.img1;
             if (!img1) {
-                alert('Необходимо загрузить хотя бы одно изображение');
+                alert('At least one image must be uploaded');
                 return;
             }
 
-            // Сохраняем файлы для последующего использования
+            // Save files for later use
             selectedFiles.img1 = img1;
             const img2 = document.getElementById('img2').files[0] || selectedFiles.img2;
             if (img2) selectedFiles.img2 = img2;
@@ -593,7 +593,7 @@
             if (img2) formData.append('reference_image2', img2);
             if (img3) formData.append('reference_image3', img3);
 
-            // Видео-референс: либо файл, либо URL
+            // Video reference: either file or URL
             const videoRefType = document.getElementById('videoRefType').value;
             if (videoRefType === 'file') {
                 const videoRef = document.getElementById('videoRef').files[0];
@@ -611,7 +611,7 @@
                 }
             }
 
-            // Сохраняем настройки для генерации видео (они НЕ отправляются на этом этапе)
+            // Save settings for video generation (they are NOT sent at this stage)
             selectedFiles.settings = {
                 platform: 'veo3',
                 aspect_ratio: document.getElementById('aspectRatio').value,
@@ -619,7 +619,7 @@
                 additional_prompt: document.getElementById('additionalPrompt').value
             };
 
-            // Для анализа и генерации промпта нужны только базовые параметры
+            // For analysis and prompt generation only basic parameters are needed
             formData.append('platform', 'veo3');
 
             const polishPerplexity = document.getElementById('polishPerplexity').checked;
@@ -646,7 +646,7 @@
             const polishPerplexityUrl = document.getElementById('polishPerplexityUrl').checked;
             formData.append('polish_with_perplexity', polishPerplexityUrl ? 'true' : 'false');
 
-            // Сохраняем настройки для последующей генерации
+            // Save settings for later generation
             selectedFiles.urlSettings = {
                 image_urls: document.getElementById('imageUrls').value,
                 video_reference_url: videoRefUrl,
@@ -658,7 +658,7 @@
         });
 
         async function processGeneration(formData) {
-            debugLog('🔵 [DEBUG] Начинаем анализ и генерацию промпта...');
+            debugLog('🔵 [DEBUG] Starting analysis and prompt generation...');
             debugLog('🔵 [DEBUG] Endpoint: /veo31/analyze-and-prompt');
 
             document.getElementById('loading').classList.add('show');
@@ -667,43 +667,43 @@
             document.getElementById('submitBtn').disabled = true;
 
             updateStep(2);
-            updateLoadingText('Анализ референсов...');
+            updateLoadingText('Analyzing references...');
 
             try {
-                debugLog('🔵 [DEBUG] Отправка запроса на анализ...');
+                debugLog('🔵 [DEBUG] Sending analysis request...');
                 const response = await fetch('http://localhost:8000/veo31/analyze-and-prompt', {
                     method: 'POST',
                     body: formData
                 });
 
-                debugLog('🔵 [DEBUG] Получен ответ:', response.status);
+                debugLog('🔵 [DEBUG] Response received:', response.status);
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error('❌ [ERROR] Ошибка ответа:', errorText);
-                    throw new Error(`Ошибка сервера: ${response.status}. ${errorText}`);
+                    console.error('❌ [ERROR] Response error:', errorText);
+                    throw new Error(`Server error: ${response.status}. ${errorText}`);
                 }
 
                 const result = await response.json();
-                debugLog('✅ [DEBUG] Результат анализа:', result);
-                debugLog('✅ [DEBUG] step3_video_generation присутствует?', !!result.step3_video_generation);
+                debugLog('✅ [DEBUG] Analysis result:', result);
+                debugLog('✅ [DEBUG] step3_video_generation present?', !!result.step3_video_generation);
 
                 if (result.step3_video_generation) {
-                    console.error('⚠️ [WARNING] КРИТИЧЕСКАЯ ОШИБКА: step3_video_generation присутствует в ответе анализа! Это не должно происходить.');
+                    console.error('⚠️ [WARNING] CRITICAL ERROR: step3_video_generation present in analysis response! This should not happen.');
                 }
 
                 displayPromptForEditing(result);
 
             } catch (error) {
-                console.error('❌ [ERROR] Ошибка:', error);
+                console.error('❌ [ERROR] Error:', error);
                 document.getElementById('resultContent').innerHTML = `
                     <div class="error">
-                        <strong>Ошибка:</strong><br>
+                        <strong>Error:</strong><br>
                         ${escapeHtml(error.message)}<br><br>
-                        Убедитесь что:<br>
-                        1. Сервер запущен (START.bat)<br>
-                        2. В .env указаны ключи (OPENAI_API_KEY и при необходимости GEMINI_API_KEY / KIE_API_KEY)<br>
-                        3. Референсы доступны (URL или файлы)
+                        Make sure that:<br>
+                        1. Server is running (START.bat)<br>
+                        2. Keys are set in .env (OPENAI_API_KEY and if needed GEMINI_API_KEY / KIE_API_KEY)<br>
+                        3. References are accessible (URL or files)
                     </div>
                 `;
                 document.getElementById('result').classList.add('show');
@@ -714,15 +714,15 @@
         }
 
         function displayPromptForEditing(result) {
-            debugLog('🟢 [DEBUG] displayPromptForEditing вызван');
+            debugLog('🟢 [DEBUG] displayPromptForEditing called');
             debugLog('🟢 [DEBUG] result keys:', Object.keys(result));
 
             updateStep(3);
             document.getElementById('loading').classList.remove('show');
 
-            // Очищаем предыдущие результаты и останавливаем проверку статуса если она была запущена
+            // Clear previous results and stop status check if it was running
             if (statusCheckInterval) {
-                debugLog('🟢 [DEBUG] Останавливаем проверку статуса');
+                debugLog('🟢 [DEBUG] Stopping status check');
                 clearInterval(statusCheckInterval);
                 statusCheckInterval = null;
             }
@@ -732,22 +732,22 @@
             let html = '';
 
             if (result.step1_analysis) {
-                html += '<div class="success"><strong>✓ Анализ завершен</strong></div>';
+                html += '<div class="success"><strong>✓ Analysis completed</strong></div>';
             }
 
             if (result.step2_prompt || result.prompt) {
                 const promptText = result.step2_prompt || result.prompt;
                 html += `
-                    <h3>Сгенерированный промпт:</h3>
+                    <h3>Generated Prompt:</h3>
                     <div class="prompt-box">
                         <textarea id="editablePrompt" style="width: 100%; min-height: 200px; padding: 15px; border: 2px solid #667eea; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.5; resize: vertical;">${escapeHtml(promptText)}</textarea>
                     </div>
                     <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button class="btn" onclick="copyPrompt()" style="flex: 1; min-width: 150px;">📋 Копировать промпт</button>
-                        <button class="btn" style="background: #4CAF50; flex: 1; min-width: 200px;" onclick="proceedToGeneration()">➡️ Далее: Генерировать видео</button>
+                        <button class="btn" onclick="copyPrompt()" style="flex: 1; min-width: 150px;">📋 Copy Prompt</button>
+                        <button class="btn" style="background: #4CAF50; flex: 1; min-width: 200px;" onclick="proceedToGeneration()">➡️ Next: Generate Video</button>
                     </div>
                     <div style="margin-top: 15px; padding: 12px; background: #e3f2fd; border-radius: 8px; color: #1565c0; border-left: 4px solid #2196F3;">
-                        <strong>ℹ️ Информация:</strong> Отредактируйте промпт в поле выше при необходимости, затем нажмите "Далее" для генерации видео. Veo сгенерирует видео длительностью 8 секунд с качеством veo3_fast.
+                        <strong>ℹ️ Information:</strong> Edit the prompt in the field above if needed, then click "Next" to generate video. Veo will generate an 8-second video with veo3_fast quality.
                     </div>
                 `;
                 window.currentPrompt = promptText;
@@ -755,38 +755,38 @@
                 window.editablePrompt = promptText;
                 window.generationSettings = result.generation_settings || {};
             } else {
-                html += '<div class="error"><strong>Ошибка:</strong> Промпт не был сгенерирован Step 2.</div>';
+                html += '<div class="error"><strong>Error:</strong> Prompt was not generated in Step 2.</div>';
             }
 
-            // ВАЖНО: НЕ обрабатываем step3_video_generation здесь - это делается только после клика "Далее"
+            // IMPORTANT: Do NOT process step3_video_generation here - this is done only after clicking "Next"
             if (result.step3_video_generation) {
-                console.error('❌ [ERROR] КРИТИЧЕСКАЯ ОШИБКА: step3_video_generation присутствует в ответе анализа!');
-                console.error('❌ [ERROR] Данные step3_video_generation:', result.step3_video_generation);
-                html += '<div class="error"><strong>⚠️ Ошибка:</strong> Получены данные генерации видео на этапе анализа. Это не должно происходить.</div>';
+                console.error('❌ [ERROR] CRITICAL ERROR: step3_video_generation present in analysis response!');
+                console.error('❌ [ERROR] step3_video_generation data:', result.step3_video_generation);
+                html += '<div class="error"><strong>⚠️ Error:</strong> Video generation data received at analysis stage. This should not happen.</div>';
             }
 
             document.getElementById('resultContent').innerHTML = html;
             document.getElementById('result').classList.add('show');
 
-            debugLog('🟢 [DEBUG] displayPromptForEditing завершен');
+            debugLog('🟢 [DEBUG] displayPromptForEditing completed');
         }
 
         async function proceedToGeneration() {
-            debugLog('🟡 [DEBUG] proceedToGeneration вызван - пользователь нажал "Далее"');
+            debugLog('🟡 [DEBUG] proceedToGeneration called - user clicked "Next"');
 
             const editedPrompt = document.getElementById('editablePrompt').value;
             if (!editedPrompt || editedPrompt.trim() === '') {
-                alert('Промпт не может быть пустым');
+                alert('Prompt cannot be empty');
                 return;
             }
 
-            debugLog('🟡 [DEBUG] Отредактированный промпт:', editedPrompt.substring(0, 100) + '...');
+            debugLog('🟡 [DEBUG] Edited prompt:', editedPrompt.substring(0, 100) + '...');
 
-            // Проверяем, используем ли мы URL или файлы
+            // Check if we're using URL or files
             const urlSettings = selectedFiles.urlSettings;
 
             if (urlSettings) {
-                // Генерация через URL
+                // Generation via URL
                 const formData = new FormData();
                 formData.append('prompt', editedPrompt);
                 formData.append('reference_image_urls', urlSettings.image_urls);
@@ -796,12 +796,12 @@
                 formData.append('aspect_ratio', urlSettings.aspect_ratio || '16:9');
                 formData.append('prefer_kie_api', urlSettings.prefer_kie_api ? 'true' : 'false');
 
-                debugLog('🟡 [DEBUG] Отправка запроса на генерацию видео через URL...');
+                debugLog('🟡 [DEBUG] Sending video generation request via URL...');
                 debugLog('🟡 [DEBUG] Endpoint: /veo31/generate-with-prompt-urls');
 
                 document.getElementById('loading').classList.add('show');
                 updateStep(4);
-                updateLoadingText('Генерация видео...');
+                updateLoadingText('Generating video...');
 
                 try {
                     const response = await fetch('http://localhost:8000/veo31/generate-with-prompt-urls', {
@@ -811,31 +811,31 @@
 
                     if (!response.ok) {
                         const errorText = await response.text();
-                        throw new Error(`Ошибка: ${response.status}. ${errorText}`);
+                        throw new Error(`Error: ${response.status}. ${errorText}`);
                     }
 
                     const result = await response.json();
                     displayResult(result);
 
                 } catch (error) {
-                    console.error('❌ [ERROR] Ошибка генерации видео:', error);
+                    console.error('❌ [ERROR] Video generation error:', error);
                     document.getElementById('resultContent').innerHTML += `
                         <div class="error">
-                            <strong>Ошибка генерации видео:</strong> ${escapeHtml(error.message)}
+                            <strong>Video generation error:</strong> ${escapeHtml(error.message)}
                         </div>
                     `;
                 } finally {
                     document.getElementById('loading').classList.remove('show');
                 }
             } else {
-                // Генерация через файлы
+                // Generation via files
             const img1 = selectedFiles.img1;
             const img2 = selectedFiles.img2;
             const img3 = selectedFiles.img3;
             const settings = selectedFiles.settings || {};
 
             if (!img1) {
-                alert('Ошибка: файлы не найдены. Пожалуйста, загрузите файлы заново.');
+                alert('Error: files not found. Please upload files again.');
                 return;
             }
 
@@ -846,23 +846,23 @@
             if (img2) formData.append('reference_image2', img2);
             if (img3) formData.append('reference_image3', img3);
 
-            // Видео-референс
+            // Video reference
             if (selectedFiles.videoRef) {
                 formData.append('video_reference', selectedFiles.videoRef);
             } else if (selectedFiles.videoRefUrl) {
                 formData.append('video_reference_url', selectedFiles.videoRefUrl);
             }
 
-            // Используем сохраненные настройки
+            // Use saved settings
             formData.append('aspect_ratio', settings.aspect_ratio || document.getElementById('aspectRatio').value);
             formData.append('prefer_kie_api', (settings.prefer_kie_api || document.getElementById('preferKie').checked) ? 'true' : 'false');
 
-            debugLog('🟡 [DEBUG] Отправка запроса на генерацию видео...');
+            debugLog('🟡 [DEBUG] Sending video generation request...');
             debugLog('🟡 [DEBUG] Endpoint: /veo31/generate-with-prompt');
 
             document.getElementById('loading').classList.add('show');
             updateStep(4);
-            updateLoadingText('Генерация видео...');
+            updateLoadingText('Generating video...');
 
             try {
                 const response = await fetch('http://localhost:8000/veo31/generate-with-prompt', {
@@ -870,23 +870,23 @@
                     body: formData
                 });
 
-                debugLog('🟡 [DEBUG] Получен ответ:', response.status);
+                debugLog('🟡 [DEBUG] Response received:', response.status);
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error('❌ [ERROR] Ошибка ответа:', errorText);
-                    throw new Error(`Ошибка: ${response.status}. ${errorText}`);
+                    console.error('❌ [ERROR] Response error:', errorText);
+                    throw new Error(`Error: ${response.status}. ${errorText}`);
                 }
 
                 const result = await response.json();
-                debugLog('✅ [DEBUG] Результат генерации видео:', result);
+                debugLog('✅ [DEBUG] Video generation result:', result);
                 displayResult(result);
 
             } catch (error) {
-                console.error('❌ [ERROR] Ошибка генерации видео:', error);
+                console.error('❌ [ERROR] Video generation error:', error);
                 document.getElementById('resultContent').innerHTML += `
                     <div class="error">
-                        <strong>Ошибка генерации видео:</strong> ${escapeHtml(error.message)}
+                        <strong>Video generation error:</strong> ${escapeHtml(error.message)}
                     </div>
                 `;
             } finally {
@@ -901,7 +901,7 @@
             document.getElementById('submitUrlBtn').disabled = true;
 
             updateStep(2);
-            updateLoadingText('Анализ референсов...');
+            updateLoadingText('Analyzing references...');
 
             try {
                 const response = await fetch('http://localhost:8000/veo31/generate-from-urls', {
@@ -911,7 +911,7 @@
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(`Ошибка: ${response.status}. ${errorText}`);
+                    throw new Error(`Error: ${response.status}. ${errorText}`);
                 }
 
                 const result = await response.json();
@@ -920,7 +920,7 @@
             } catch (error) {
                 document.getElementById('resultContent').innerHTML = `
                     <div class="error">
-                        <strong>Ошибка:</strong> ${escapeHtml(error.message)}
+                        <strong>Error:</strong> ${escapeHtml(error.message)}
                     </div>
                 `;
                 document.getElementById('result').classList.add('show');
@@ -936,14 +936,14 @@
             let html = '';
 
             if (result.step1_analysis) {
-                html += '<div class="success"><strong>✓ Анализ завершен</strong></div>';
+                html += '<div class="success"><strong>✓ Analysis completed</strong></div>';
             }
 
             if (result.step2_prompt) {
                 html += `
-                    <h3>Сгенерированный промпт:</h3>
+                    <h3>Generated Prompt:</h3>
                     <div class="prompt-box">${escapeHtml(result.step2_prompt)}</div>
-                    <button class="btn" onclick="copyPrompt()">📋 Копировать промпт</button>
+                    <button class="btn" onclick="copyPrompt()">📋 Copy Prompt</button>
                 `;
                 window.currentPrompt = result.step2_prompt;
             }
@@ -955,7 +955,7 @@
 
                 html += `
                     <div class="info-box">
-                        <strong>Поставщик:</strong> ${providerLabel} &nbsp;|&nbsp; <strong>Статус:</strong> ${statusLabel}
+                        <strong>Provider:</strong> ${providerLabel} &nbsp;|&nbsp; <strong>Status:</strong> ${statusLabel}
                     </div>
                 `;
 
@@ -970,9 +970,9 @@
                 if (videoGen.status === 'processing') {
                     html += `
                         <div class="success">
-                            <strong>✓ Видео генерируется...</strong><br>
+                            <strong>✓ Video is generating...</strong><br>
                             Task ID: ${videoGen.task_id}<br>
-                            Статус будет проверяться автоматически
+                            Status will be checked automatically
                         </div>
                     `;
                     currentTaskId = videoGen.task_id;
@@ -981,9 +981,9 @@
                 } else if (videoGen.status === 'submitted') {
                     html += `
                         <div class="success">
-                            <strong>✓ Задача отправлена в Kie.ai</strong><br>
+                            <strong>✓ Task submitted to Kie.ai</strong><br>
                             Task ID: ${escapeHtml(videoGen.task_id || '—')}<br>
-                            Статус будет проверяться автоматически
+                            Status will be checked automatically
                         </div>
                     `;
                     currentTaskId = videoGen.task_id;
@@ -991,26 +991,26 @@
                     startStatusCheck();
                 } else if (videoGen.video_url) {
                     html += `
-                        <div class="success"><strong>✓ Видео готово!</strong></div>
+                        <div class="success"><strong>✓ Video ready!</strong></div>
                         <div class="video-result">
                             <video controls style="max-width: 100%; border-radius: 8px; margin: 20px 0;">
-                                <source src="${videoGen.video_url}" type="video/mp4">
-                                Ваш браузер не поддерживает video tag.
+                                <source src="${escapeHtml(videoGen.video_url)}" type="video/mp4">
+                                Your browser does not support video tag.
                             </video>
                             <br>
-                            <a href="${videoGen.video_url}" download class="btn">💾 Скачать видео</a>
-                            <button class="btn" onclick="navigator.clipboard.writeText('${videoGen.video_url}').then(() => alert('Ссылка скопирована!'))">🔗 Копировать ссылку</button>
+                            <a href="${escapeHtml(videoGen.video_url)}" download class="btn">💾 Download Video</a>
+                            <button class="btn" onclick="navigator.clipboard.writeText('${escapeHtml(videoGen.video_url)}').then(() => alert('Link copied!'))">🔗 Copy Link</button>
                         </div>
                     `;
                 } else if (videoGen.status === 'failed' || videoGen.error) {
                     html += `
                         <div class="error">
-                            <strong>⚠ Генерация видео недоступна:</strong><br>
-                            ${escapeHtml(videoGen.error || videoGen.message || 'Ошибка без описания')}<br><br>
-                            <strong>Что делать:</strong><br>
-                            1. Скопируйте промпт выше (кнопка "📋 Копировать промпт")<br>
-                            2. Откройте <a href="https://aistudio.google.com" target="_blank" style="color: #4285f4;">Google AI Studio</a> или <a href="https://app.kie.ai" target="_blank" style="color: #4285f4;">панель Kie.ai</a><br>
-                            3. Вставьте промпт и загрузите изображения вручную
+                            <strong>⚠ Video generation unavailable:</strong><br>
+                            ${escapeHtml(videoGen.error || videoGen.message || 'Error without description')}<br><br>
+                            <strong>What to do:</strong><br>
+                            1. Copy the prompt above (button "📋 Copy Prompt")<br>
+                            2. Open <a href="https://aistudio.google.com" target="_blank" style="color: #4285f4;">Google AI Studio</a> or <a href="https://app.kie.ai" target="_blank" style="color: #4285f4;">Kie.ai panel</a><br>
+                            3. Paste the prompt and upload images manually
                         </div>
                     `;
                 }
@@ -1031,7 +1031,27 @@ ${escapeHtml(JSON.stringify(result.generation_attempts, null, 2))}
         function startStatusCheck() {
             if (!currentTaskId) return;
 
-            const checkInterval = currentProvider === 'kie.ai' ? 10000 : 5000; // Kie.ai проверяем реже
+            const checkInterval = currentProvider === 'kie.ai' ? 1000 : 5000; // Check Kie.ai every 1 second for faster detection
+
+            // Immediate first check (don't wait for interval)
+            (async () => {
+                try {
+                    let statusUrl;
+                    if (currentProvider === 'kie.ai') {
+                        statusUrl = `http://localhost:8000/veo31/kie-status/${currentTaskId}`;
+                    } else {
+                        statusUrl = `http://localhost:8000/veo31/status/${currentTaskId}`;
+                    }
+
+                    const response = await fetch(statusUrl);
+                    if (response.ok) {
+                        const status = await response.json();
+                        processStatusResponse(status);
+                    }
+                } catch (error) {
+                    console.error('Initial status check error:', error);
+                }
+            })();
 
             statusCheckInterval = setInterval(async () => {
                 try {
@@ -1047,102 +1067,158 @@ ${escapeHtml(JSON.stringify(result.generation_attempts, null, 2))}
                         throw new Error(`HTTP ${response.status}`);
                     }
                     const status = await response.json();
+                    processStatusResponse(status);
+                } catch (error) {
+                    console.error('Status check error:', error);
+                }
+            }, checkInterval);
+        }
 
-                    // Обработка для Google Veo
-                    if (currentProvider === 'google' || !currentProvider) {
-                        if (status.status === 'completed' && status.video_url) {
-                            clearInterval(statusCheckInterval);
-                            updateLoadingText('Видео готово!');
-                            document.getElementById('resultContent').innerHTML += `
-                                <div class="success"><strong>✓ Видео готово!</strong></div>
-                                <div class="video-result">
-                                    <video controls>
-                                        <source src="${status.video_url}" type="video/mp4">
-                                    </video>
-                                    <br>
-                                    <a href="${status.video_url}" download class="btn">💾 Скачать видео</a>
-                                    <button class="btn" onclick="navigator.clipboard.writeText('${status.video_url}').then(() => alert('Ссылка скопирована!'))">🔗 Копировать ссылку</button>
-                                </div>
-                            `;
-                        } else if (status.status === 'failed') {
-                            clearInterval(statusCheckInterval);
-                            updateLoadingText('Ошибка генерации');
-                        }
-                    }
-                    // Обработка для Kie.ai
-                    else if (currentProvider === 'kie.ai') {
-                        // Проверяем video_url в разных местах ответа (из обновленного API)
-                        const videoUrl = status.video_url ||
+        function processStatusResponse(status) {
+            // Processing for Google Veo
+            if (currentProvider === 'google' || !currentProvider) {
+                if (status.status === 'completed' && status.video_url) {
+                    clearInterval(statusCheckInterval);
+                    updateLoadingText('Video ready!');
+                    document.getElementById('resultContent').innerHTML += `
+                        <div class="success"><strong>✓ Video ready!</strong></div>
+                        <div class="video-result">
+                            <video controls>
+                                <source src="${escapeHtml(status.video_url)}" type="video/mp4">
+                            </video>
+                            <br>
+                            <a href="${escapeHtml(status.video_url)}" download class="btn">💾 Download Video</a>
+                            <button class="btn" onclick="navigator.clipboard.writeText('${escapeHtml(status.video_url)}').then(() => alert('Link copied!'))">🔗 Copy Link</button>
+                        </div>
+                    `;
+                } else if (status.status === 'failed') {
+                    clearInterval(statusCheckInterval);
+                    updateLoadingText('Generation error');
+                }
+            }
+            // Processing for Kie.ai
+            else if (currentProvider === 'kie.ai') {
+                        // Check video_url in different places in response (from updated API)
+                        // Support all possible response formats from Kie.ai
+                        let videoUrl = status.video_url ||
                                        status.result?.video_url ||
                                        status.raw_response?.result?.video_url ||
                                        status.raw_response?.video_url ||
                                        status.result?.videoUrl ||
                                        status.raw_response?.data?.video_url;
 
+                        // Also check for Kie.ai callback format: data.data.info.resultUrls
+                        if (!videoUrl && status.raw_response?.data?.info?.resultUrls) {
+                            const resultUrls = status.raw_response.data.info.resultUrls;
+                            if (Array.isArray(resultUrls) && resultUrls.length > 0) {
+                                videoUrl = resultUrls[0];
+                            } else if (typeof resultUrls === 'string') {
+                                videoUrl = resultUrls;
+                            }
+                        }
+
+                        // Check data.data.info.resultUrls (nested data structure)
+                        if (!videoUrl && status.raw_response?.data?.data?.info?.resultUrls) {
+                            const resultUrls = status.raw_response.data.data.info.resultUrls;
+                            if (Array.isArray(resultUrls) && resultUrls.length > 0) {
+                                videoUrl = resultUrls[0];
+                            } else if (typeof resultUrls === 'string') {
+                                videoUrl = resultUrls;
+                            }
+                        }
+
+                        // Check status.data.data.info.resultUrls (direct status format)
+                        if (!videoUrl && status.data?.data?.info?.resultUrls) {
+                            const resultUrls = status.data.data.info.resultUrls;
+                            if (Array.isArray(resultUrls) && resultUrls.length > 0) {
+                                videoUrl = resultUrls[0];
+                            } else if (typeof resultUrls === 'string') {
+                                videoUrl = resultUrls;
+                            }
+                        }
+
+                        // Check data.data.resultUrls (without info wrapper)
+                        if (!videoUrl && status.raw_response?.data?.resultUrls) {
+                            const resultUrls = status.raw_response.data.resultUrls;
+                            if (Array.isArray(resultUrls) && resultUrls.length > 0) {
+                                videoUrl = resultUrls[0];
+                            } else if (typeof resultUrls === 'string') {
+                                videoUrl = resultUrls;
+                            }
+                        }
+
+                        // Check data.data.resultUrls (nested data structure without info)
+                        if (!videoUrl && status.raw_response?.data?.data?.resultUrls) {
+                            const resultUrls = status.raw_response.data.data.resultUrls;
+                            if (Array.isArray(resultUrls) && resultUrls.length > 0) {
+                                videoUrl = resultUrls[0];
+                            } else if (typeof resultUrls === 'string') {
+                                videoUrl = resultUrls;
+                            }
+                        }
+
                         const kieStatus = status.status || status.code || (status.raw_response && status.raw_response.status);
 
-                        // Если endpoint не найден, показываем сообщение
+                        // If endpoint not found, show message
                         if (kieStatus === 'unknown' || status.message?.includes('endpoint not found')) {
-                            // Не останавливаем проверку, но показываем информацию
-                            updateLoadingText('Проверка статуса (проверьте вручную в панели Kie.ai)...');
+                            // Don't stop checking, but show information
+                            updateLoadingText('Checking status (check manually in Kie.ai panel)...');
                             if (!document.getElementById('kie-manual-check')) {
                                 document.getElementById('resultContent').innerHTML += `
                                     <div class="info-box" id="kie-manual-check">
-                                        <strong>ℹ️ Автоматическая проверка статуса недоступна</strong><br>
+                                        <strong>ℹ️ Automatic status check unavailable</strong><br>
                                         Task ID: <code>${escapeHtml(currentTaskId)}</code><br>
-                                        <a href="https://app.kie.ai" target="_blank" style="color: #4285f4; font-weight: bold;">Проверьте статус вручную в панели Kie.ai</a><br>
-                                        <small>Статус будет проверяться периодически...</small>
+                                        <a href="https://app.kie.ai" target="_blank" style="color: #4285f4; font-weight: bold;">Check status manually in Kie.ai panel</a><br>
+                                        <small>Status will be checked periodically...</small>
                                     </div>
                                 `;
                             }
                         }
-                        // Если видео готово (статус completed и есть video_url)
-                        else if ((kieStatus === 'completed' || kieStatus === 'success' || kieStatus === 200) && videoUrl) {
+                        // If video is ready (status completed and video_url exists)
+                        // IMPORTANT: Also check if videoUrl exists even if status is not explicitly "completed"
+                        // Sometimes Kie.ai returns video_url before status changes to "completed"
+                        if (videoUrl && (kieStatus === 'completed' || kieStatus === 'success' || kieStatus === 200 || !kieStatus)) {
                             clearInterval(statusCheckInterval);
-                            updateLoadingText('Видео готово!');
+                            updateLoadingText('Video ready!');
 
-                            // Удаляем сообщение о ручной проверке если оно было
+                            // Remove manual check message if it was present
                             const manualCheckEl = document.getElementById('kie-manual-check');
                             if (manualCheckEl) {
                                 manualCheckEl.remove();
                             }
 
                             document.getElementById('resultContent').innerHTML += `
-                                <div class="success"><strong>✓ Видео готово!</strong></div>
+                                <div class="success"><strong>✓ Video ready!</strong></div>
                                 <div class="video-result">
                                     <video controls style="max-width: 100%; border-radius: 8px;">
                                         <source src="${escapeHtml(videoUrl)}" type="video/mp4">
-                                        Ваш браузер не поддерживает видео.
+                                        Your browser does not support video.
                                     </video>
                                     <br><br>
-                                    <a href="${escapeHtml(videoUrl)}" download class="btn" style="margin-right: 10px;">💾 Скачать видео</a>
-                                    <button class="btn" onclick="navigator.clipboard.writeText('${escapeHtml(videoUrl)}').then(() => alert('Ссылка скопирована в буфер обмена!'))">🔗 Копировать ссылку</button>
+                                    <a href="${escapeHtml(videoUrl)}" download class="btn" style="margin-right: 10px;">💾 Download Video</a>
+                                    <button class="btn" onclick="navigator.clipboard.writeText('${escapeHtml(videoUrl)}').then(() => alert('Link copied to clipboard!'))">🔗 Copy Link</button>
                                 </div>
                             `;
                             document.getElementById('result').classList.add('show');
                         }
-                        // Если статус показывает что обработка еще идет
+                        // If status shows processing is still ongoing
                         else if (kieStatus === 'processing' || kieStatus === 'pending' || kieStatus === 'in_progress' || (!kieStatus && !videoUrl)) {
-                            updateLoadingText(`Генерация видео... (${kieStatus || 'в процессе'})`);
+                            updateLoadingText(`Generating video... (${kieStatus || 'in progress'})`);
                         }
-                        // Если ошибка
+                        // If error
                         else if (kieStatus === 'failed' || kieStatus === 'error') {
                             clearInterval(statusCheckInterval);
-                            updateLoadingText('Ошибка генерации');
-                            const errorMsg = status.error || status.message || status.raw_response?.error || 'Неизвестная ошибка';
+                            updateLoadingText('Generation error');
+                            const errorMsg = status.error || status.message || status.raw_response?.error || 'Unknown error';
                             document.getElementById('resultContent').innerHTML += `
                                 <div class="error">
-                                    <strong>⚠ Ошибка генерации:</strong><br>
+                                    <strong>⚠ Generation error:</strong><br>
                                     ${escapeHtml(errorMsg)}<br><br>
-                                    <a href="https://app.kie.ai" target="_blank" style="color: #4285f4;">Проверьте статус в панели Kie.ai</a>
+                                    <a href="https://app.kie.ai" target="_blank" style="color: #4285f4;">Check status in Kie.ai panel</a>
                                 </div>
                             `;
                         }
                     }
-                } catch (error) {
-                    console.error('Ошибка проверки статуса:', error);
-                }
-            }, checkInterval);
         }
 
         function escapeHtml(text) {
@@ -1155,17 +1231,17 @@ ${escapeHtml(JSON.stringify(result.generation_attempts, null, 2))}
             const promptToCopy = document.getElementById('editablePrompt')?.value || window.currentPrompt || '';
             if (promptToCopy) {
                 navigator.clipboard.writeText(promptToCopy).then(() => {
-                    alert('Промпт скопирован!');
+                    alert('Prompt copied!');
                 }).catch(err => {
-                    console.error('Ошибка копирования:', err);
-                    alert('Не удалось скопировать промпт');
+                    console.error('Copy error:', err);
+                    alert('Failed to copy prompt');
                 });
             } else {
-                alert('Нет промпта для копирования');
+                alert('No prompt to copy');
             }
         }
 
-        // Проверка доступности сервера
+        // Check server availability
         window.addEventListener('load', async () => {
             try {
                 const response = await fetch('http://localhost:8000/');
@@ -1173,8 +1249,8 @@ ${escapeHtml(JSON.stringify(result.generation_attempts, null, 2))}
             } catch (error) {
                 document.getElementById('resultContent').innerHTML = `
                     <div class="error">
-                        <strong>⚠ Сервер не запущен!</strong><br>
-                        Запустите сервер через start_server.bat
+                        <strong>⚠ Server not running!</strong><br>
+                        Start server via START.bat
                     </div>
                 `;
                 document.getElementById('result').classList.add('show');

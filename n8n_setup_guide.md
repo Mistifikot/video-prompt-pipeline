@@ -1,60 +1,60 @@
 # N8N Workflow Setup Guide
 
-## Быстрая установка для Video Prompt Pipeline
+## Quick Setup for Video Prompt Pipeline
 
-### Шаг 1: Регистрация и доступ
+### Step 1: Registration and Access
 
-1. Зарегистрируйтесь на [n8n.cloud](https://n8n.cloud) (облачная версия) или установите self-hosted:
+1. Sign up at [n8n.cloud](https://n8n.cloud) (cloud version) or install self-hosted:
    ```bash
    npm install n8n -g
    n8n start
    ```
 
-### Шаг 2: Импорт workflow
+### Step 2: Import Workflow
 
-1. В N8N создайте новый workflow
-2. Импортируйте `n8n_workflow.json`:
-   - Нажмите на меню (три точки) → Import from File
-   - Выберите `n8n_workflow.json`
+1. In N8N create a new workflow
+2. Import `n8n_workflow.json`:
+   - Click menu (three dots) → Import from File
+   - Select `n8n_workflow.json`
 
-### Шаг 3: Настройка API ключей
+### Step 3: API Key Configuration
 
-1. Перейдите в **Settings** → **Credentials**
-2. Создайте credential для OpenAI:
-   - Название: "OpenAI API"
-   - API Key: ваш ключ от OpenAI
+1. Go to **Settings** → **Credentials**
+2. Create credential for OpenAI:
+   - Name: "OpenAI API"
+   - API Key: your OpenAI key
 
-### Шаг 4: Настройка узлов
+### Step 4: Node Configuration
 
-#### Узел "Webhook Trigger"
-- Метод: POST
+#### "Webhook Trigger" Node
+- Method: POST
 - Path: `video-prompt`
 - Response Mode: Last Node
 
-#### Узел "Download Media"
-- Метод: GET
+#### "Download Media" Node
+- Method: GET
 - URL: `={{ $json.body.video_url }}`
 - Response Format: File
 
-#### Узел "Agent 1: Visual Analyzer"
+#### "Agent 1: Visual Analyzer" Node
 - Model: `gpt-4o`
 - Temperature: `0.3`
 - Max Tokens: `2000`
-- В attachments добавьте binary data из предыдущего узла
+- Add binary data from previous node to attachments
 
-#### Узел "Agent 2: Prompt Generator"
+#### "Agent 2: Prompt Generator" Node
 - Model: `gpt-4o`
 - Temperature: `0.7`
 - Max Tokens: `1000`
-- System prompt настроен автоматически
+- System prompt configured automatically
 
-### Шаг 5: Активация и тестирование
+### Step 5: Activation and Testing
 
-1. Сохраните workflow
-2. Активируйте его (переключатель в правом верхнем углу)
-3. Скопируйте Production Webhook URL
+1. Save workflow
+2. Activate it (toggle in top right corner)
+3. Copy Production Webhook URL
 
-### Шаг 6: Тестирование
+### Step 6: Testing
 
 ```bash
 curl -X POST "YOUR_WEBHOOK_URL" \
@@ -66,17 +66,17 @@ curl -X POST "YOUR_WEBHOOK_URL" \
   }'
 ```
 
-## Альтернатива: Использование FastAPI сервера
+## Alternative: Using FastAPI Server
 
-Если не хотите использовать N8N напрямую, можно использовать наш FastAPI сервер:
+If you don't want to use N8N directly, you can use our FastAPI server:
 
-1. Запустите сервер:
+1. Start the server:
    ```bash
    cd video-prompt-pipeline
    python api_server.py
    ```
 
-2. В N8N создайте HTTP Request узел:
+2. In N8N create HTTP Request node:
    - Method: POST
    - URL: `http://localhost:8000/process`
    - Body: Form Data
@@ -84,9 +84,9 @@ curl -X POST "YOUR_WEBHOOK_URL" \
      - `platform`: `={{ $json.body.platform }}`
      - `use_case`: `={{ $json.body.use_case }}`
 
-## Примеры payload
+## Example Payloads
 
-### Изображение для Veo 3
+### Image for Veo 3
 ```json
 {
   "video_url": "https://example.com/jewelry.jpg",
@@ -95,7 +95,7 @@ curl -X POST "YOUR_WEBHOOK_URL" \
 }
 ```
 
-### Видео для Sora 2
+### Video for Sora 2
 ```json
 {
   "video_url": "https://example.com/jewelry-showcase.mp4",
@@ -106,14 +106,13 @@ curl -X POST "YOUR_WEBHOOK_URL" \
 
 ## Troubleshooting
 
-**Ошибка: "API key не найден"**
-- Проверьте, что credential создан и правильно подключен к узлам
+**Error: "API key not found"**
+- Check that credential is created and properly connected to nodes
 
-**Ошибка: "Не удалось загрузить медиа"**
-- Проверьте доступность URL
-- Убедитесь, что URL доступен публично
+**Error: "Failed to load media"**
+- Check URL availability
+- Make sure URL is publicly accessible
 
-**Тайм-аут при анализе видео**
-- Увеличьте timeout в узле Download Media
-- Для больших видео используйте Gemini (требует дополнительной настройки)
-
+**Timeout during video analysis**
+- Increase timeout in Download Media node
+- For large videos use Gemini (requires additional configuration)

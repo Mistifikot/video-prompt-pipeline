@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Prompt Pipeline - Анализ видео</title>
+    <title>Video Prompt Pipeline - Video Analysis</title>
     <style>
         * {
             margin: 0;
@@ -222,19 +222,19 @@
 <body>
     <div class="container">
         <h1>🎬 Video Prompt Pipeline</h1>
-        <p class="subtitle">Анализ видео и генерация промптов для AI-видео платформ</p>
+        <p class="subtitle">Video analysis and prompt generation for AI video platforms</p>
 
         <form id="analyzeForm">
             <div class="form-group">
-                <label for="videoUrl">Ссылка на видео или изображение:</label>
+                <label for="videoUrl">Video or Image URL:</label>
                 <input type="text" id="videoUrl"
-                       placeholder="https://example.com/video.mp4 или https://example.com/image.jpg"
+                       placeholder="https://example.com/video.mp4 or https://example.com/image.jpg"
                        required>
             </div>
 
             <div class="options-row">
                 <div class="form-group">
-                    <label for="platform">Платформа:</label>
+                    <label for="platform">Platform:</label>
                     <select id="platform">
                         <option value="veo3">Google Veo 3</option>
                         <option value="sora2">OpenAI Sora 2</option>
@@ -243,7 +243,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="useCase">Тип задачи:</label>
+                    <label for="useCase">Use Case:</label>
                     <select id="useCase">
                         <option value="product_video">Product Video</option>
                         <option value="hero_image">Hero Image</option>
@@ -257,22 +257,22 @@
             <div class="form-group checkbox-group">
                 <input type="checkbox" id="useGemini">
                 <label for="useGemini" style="margin: 0; font-weight: normal;">
-                    Использовать Gemini для анализа (рекомендуется для видео)
+                    Use Gemini for analysis (recommended for video)
                 </label>
             </div>
 
             <button type="submit" class="btn" id="submitBtn">
-                🚀 Анализировать и сгенерировать промпт
+                🚀 Analyze and Generate Prompt
             </button>
         </form>
 
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>Анализ видео и генерация промпта... Это может занять минуту</p>
+            <p>Analyzing video and generating prompt... This may take a minute</p>
         </div>
 
         <div class="result" id="result">
-            <h2>Результат</h2>
+            <h2>Result</h2>
             <div id="resultContent"></div>
         </div>
     </div>
@@ -292,7 +292,7 @@
             const useCase = document.getElementById('useCase').value;
             const useGemini = document.getElementById('useGemini').checked;
 
-            // Показываем загрузку
+            // Show loading
             loading.classList.add('show');
             result.classList.remove('show');
             submitBtn.disabled = true;
@@ -312,30 +312,30 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error(`Ошибка сервера: ${response.status}`);
+                    throw new Error(`Server error: ${response.status}`);
                 }
 
                 const data = await response.json();
 
-                // Формируем результат
+                // Build result
                 let html = `
                     <div class="success">
-                        <strong>✓ Анализ успешно завершен!</strong><br>
-                        Платформа: ${data.platform_name || platform}<br>
-                        Тип задачи: ${data.use_case || useCase}
+                        <strong>✓ Analysis completed successfully!</strong><br>
+                        Platform: ${data.platform_name || platform}<br>
+                        Use Case: ${data.use_case || useCase}
                     </div>
                 `;
 
                 if (data.prompt) {
                     html += `
                         <div class="prompt-box" id="promptText">${escapeHtml(data.prompt)}</div>
-                        <button class="copy-btn" onclick="copyPrompt()">📋 Копировать промпт</button>
+                        <button class="copy-btn" onclick="copyPrompt()">📋 Copy Prompt</button>
                     `;
                 }
 
                 if (data.scene_analysis && typeof data.scene_analysis === 'object') {
                     html += `
-                        <h3 style="margin-top: 20px;">Детальный анализ сцены:</h3>
+                        <h3 style="margin-top: 20px;">Detailed Scene Analysis:</h3>
                         <div class="prompt-box" style="font-size: 0.85em;">${formatSceneAnalysis(data.scene_analysis)}</div>
                     `;
                 }
@@ -346,12 +346,12 @@
             } catch (error) {
                 resultContent.innerHTML = `
                     <div class="error">
-                        <strong>✗ Ошибка:</strong><br>
+                        <strong>✗ Error:</strong><br>
                         ${escapeHtml(error.message)}<br><br>
-                        Убедитесь, что:<br>
-                        1. Сервер запущен (start_server.bat)<br>
-                        2. Ссылка на видео доступна<br>
-                        3. Сервер доступен по адресу http://localhost:8000
+                        Make sure that:<br>
+                        1. Server is running (START.bat)<br>
+                        2. Video URL is accessible<br>
+                        3. Server is available at http://localhost:8000
                     </div>
                 `;
                 result.classList.add('show');
@@ -369,24 +369,24 @@
 
         function formatSceneAnalysis(analysis) {
             if (analysis.error) {
-                return `Ошибка анализа: ${analysis.error}`;
+                return `Analysis error: ${analysis.error}`;
             }
 
             let formatted = '';
             if (analysis.main_objects) {
-                formatted += `<strong>Объекты:</strong> ${Array.isArray(analysis.main_objects) ? analysis.main_objects.join(', ') : JSON.stringify(analysis.main_objects)}<br><br>`;
+                formatted += `<strong>Objects:</strong> ${Array.isArray(analysis.main_objects) ? analysis.main_objects.join(', ') : JSON.stringify(analysis.main_objects)}<br><br>`;
             }
             if (analysis.materials) {
-                formatted += `<strong>Материалы:</strong> ${JSON.stringify(analysis.materials, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}<br><br>`;
+                formatted += `<strong>Materials:</strong> ${JSON.stringify(analysis.materials, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}<br><br>`;
             }
             if (analysis.lighting) {
-                formatted += `<strong>Освещение:</strong> ${JSON.stringify(analysis.lighting, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}<br><br>`;
+                formatted += `<strong>Lighting:</strong> ${JSON.stringify(analysis.lighting, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}<br><br>`;
             }
             if (analysis.camera_work) {
-                formatted += `<strong>Камера:</strong> ${JSON.stringify(analysis.camera_work, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}<br><br>`;
+                formatted += `<strong>Camera:</strong> ${JSON.stringify(analysis.camera_work, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}<br><br>`;
             }
             if (analysis.style_mood) {
-                formatted += `<strong>Стиль:</strong> ${JSON.stringify(analysis.style_mood, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}`;
+                formatted += `<strong>Style:</strong> ${JSON.stringify(analysis.style_mood, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}`;
             }
 
             return formatted || JSON.stringify(analysis, null, 2).replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
@@ -396,33 +396,33 @@
             const promptText = document.getElementById('promptText');
             if (promptText) {
                 navigator.clipboard.writeText(promptText.textContent).then(() => {
-                    alert('Промпт скопирован в буфер обмена!');
+                    alert('Prompt copied to clipboard!');
                 }).catch(err => {
-                    console.error('Ошибка копирования:', err);
-                    // Fallback для старых браузеров
+                    console.error('Copy error:', err);
+                    // Fallback for older browsers
                     const textarea = document.createElement('textarea');
                     textarea.value = promptText.textContent;
                     document.body.appendChild(textarea);
                     textarea.select();
                     document.execCommand('copy');
                     document.body.removeChild(textarea);
-                    alert('Промпт скопирован в буфер обмена!');
+                    alert('Prompt copied to clipboard!');
                 });
             }
         };
 
-        // Проверка доступности сервера при загрузке
+        // Check server availability on load
         window.addEventListener('load', async () => {
             try {
                 const response = await fetch('http://localhost:8000/');
                 if (!response.ok) {
-                    throw new Error('Сервер недоступен');
+                    throw new Error('Server unavailable');
                 }
             } catch (error) {
                 resultContent.innerHTML = `
                     <div class="error">
-                        <strong>⚠ Сервер не запущен!</strong><br><br>
-                        Запустите сервер через <code>start_server.bat</code> или вручную:
+                        <strong>⚠ Server not running!</strong><br><br>
+                        Start server via <code>START.bat</code> or manually:
                         <code>python api_server.py</code>
                     </div>
                 `;

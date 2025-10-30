@@ -1,5 +1,5 @@
 """
-Утилиты для логирования
+Logging utilities
 """
 import logging
 import sys
@@ -9,23 +9,23 @@ from config import LOG_LEVEL, LOG_TO_FILE, LOG_FILE, DEBUG
 
 def setup_logging(name: str = "video_prompt_pipeline", log_file: Optional[str] = None) -> logging.Logger:
     """
-    Настраивает структурированное логирование
+    Sets up structured logging
 
     Args:
-        name: Имя логгера
-        log_file: Путь к файлу для логирования (опционально)
+        name: Logger name
+        log_file: Path to log file (optional)
 
     Returns:
-        Настроенный логгер
+        Configured logger
     """
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 
-    # Если уже настроен, возвращаем существующий
+    # If already configured, return existing
     if logger.handlers:
         return logger
 
-    # Формат логов
+    # Log format
     if DEBUG:
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s',
@@ -37,13 +37,13 @@ def setup_logging(name: str = "video_prompt_pipeline", log_file: Optional[str] =
             datefmt='%Y-%m-%d %H:%M:%S'
         )
 
-    # Консольный handler
+    # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-    # Файловый handler (если включен)
+    # File handler (if enabled)
     if LOG_TO_FILE or log_file:
         file_path = log_file or Path(__file__).parent / LOG_FILE
         file_handler = logging.FileHandler(file_path, encoding='utf-8')
@@ -53,6 +53,6 @@ def setup_logging(name: str = "video_prompt_pipeline", log_file: Optional[str] =
 
     return logger
 
-# Глобальный логгер для использования в проекте
+# Global logger for use in project
 logger = setup_logging()
 

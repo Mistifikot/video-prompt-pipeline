@@ -1,6 +1,6 @@
 """
-Клиент для работы с Google Veo 3.1 API
-Поддержка "Видео по образцам" с референсными изображениями
+Client for working with Google Veo 3.1 API
+Support for "Video from samples" with reference images
 """
 
 import os
@@ -16,32 +16,32 @@ import mimetypes
 
 
 class Veo31Client:
-    """Клиент для Veo 3.1 API с поддержкой референсных изображений"""
+    """Client for Veo 3.1 API with reference image support"""
 
     def __init__(self, api_key: Optional[str] = None):
         """
-        Инициализация клиента Veo 3.1
+        Initialize Veo 3.1 client
 
         Args:
-            api_key: API ключ Google (используется тот же что и для Gemini)
+            api_key: Google API key (same as used for Gemini)
         """
         self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
-            raise ValueError("Не указан API ключ для Veo 3.1. Установите GEMINI_API_KEY в .env")
+            raise ValueError("API key for Veo 3.1 not specified. Set GEMINI_API_KEY in .env")
 
         # Veo 3.1 API endpoint
-        # Примечание: актуальный endpoint может отличаться
-        # Возможны варианты:
-        # 1. Через Vertex AI: https://{location}-aiplatform.googleapis.com/v1
-        # 2. Через Generative AI API (как Gemini)
-        # 3. Через отдельный Veo API endpoint
+        # Note: actual endpoint may differ
+        # Possible variants:
+        # 1. Via Vertex AI: https://{location}-aiplatform.googleapis.com/v1
+        # 2. Via Generative AI API (like Gemini)
+        # 3. Via separate Veo API endpoint
 
-        # Пока используем структуру на основе Gemini API
-        # TODO: Обновить при получении официальной документации Veo 3.1 API
+        # For now using structure based on Gemini API
+        # TODO: Update when official Veo 3.1 API documentation is received
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
-        self.model = "veo-3.1"  # Название модели Veo 3.1
+        self.model = "veo-3.1"  # Veo 3.1 model name
 
-        # Альтернативный вариант через Vertex AI (если используется)
+        # Alternative via Vertex AI (if used)
         self.use_vertex_ai = os.getenv("USE_VERTEX_AI", "false").lower() == "true"
         if self.use_vertex_ai:
             self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -49,22 +49,22 @@ class Veo31Client:
             self.base_url = f"https://{self.location}-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/{self.location}/publishers/google/models/{self.model}"
 
     def _encode_image(self, image_data: Union[bytes, str, Path]) -> str:
-        """Кодирует изображение в base64"""
+        """Encodes image to base64"""
         if isinstance(image_data, (str, Path)):
             path = Path(image_data)
             if path.exists():
                 image_data = path.read_bytes()
             elif str(image_data).startswith(('http://', 'https://')):
-                # Скачиваем изображение
+                # Download image
                 response = requests.get(str(image_data), timeout=30)
                 image_data = response.content
             else:
-                raise ValueError(f"Не удалось загрузить изображение: {image_data}")
+                raise ValueError(f"Failed to load image: {image_data}")
 
         return base64.b64encode(image_data).decode('utf-8')
 
     def _prepare_reference_images(self, images: List[Union[str, Path, bytes, Dict]]) -> List[Dict]:
-        """Готовит референсные изображения для отправки в API"""
+        """Prepares reference images for sending to API"""
         prepared_images = []
 
         for i, image in enumerate(images):
@@ -99,7 +99,7 @@ class Veo31Client:
                         mime_type = mimetypes.guess_type(str(path))[0] or mime_type
 
                 if image_data is None:
-                    raise ValueError("Не удалось получить данные изображения")
+                    raise ValueError("Failed to get image data")
 
                 base64_image = base64.b64encode(image_data).decode('utf-8')
 
@@ -110,7 +110,7 @@ class Veo31Client:
                     }
                 })
             except Exception as e:
-                print(f"Ошибка при подготовке изображения {i+1}: {e}")
+                print(f"Error preparing image {i+1}: {e}")
                 continue
 
         return prepared_images
@@ -125,30 +125,30 @@ class Veo31Client:
         quality: str = "high"
     ) -> Dict:
         """
-        Генерирует видео в Veo 3.1 на основе промпта и референсных изображений
+        Generates video in Veo 3.1 based on prompt and reference images
 
         Args:
-            prompt: Текстовый промпт (из анализатора)
-            reference_images: Список из 3 референсных изображений (URL, путь или bytes)
-            video_reference: Опциональное референсное видео
-            duration_seconds: Длительность видео в секундах (5-60)
-            aspect_ratio: Соотношение сторон (16:9, 9:16, 1:1)
-            quality: Качество (high, standard)
+            prompt: Text prompt (from analyzer)
+            reference_images: List of 3 reference images (URL, path or bytes)
+            video_reference: Optional reference video
+            duration_seconds: Video duration in seconds (5-60)
+            aspect_ratio: Aspect ratio (16:9, 9:16, 1:1)
+            quality: Quality (high, standard)
 
         Returns:
-            Dict с информацией о сгенерированном видео
+            Dict with information about generated video
         """
         if len(reference_images) < 1:
-            raise ValueError("Необходимо минимум 1 референсное изображение")
+            raise ValueError("At least 1 reference image required")
 
         if len(reference_images) > 3:
-            print(f"Предупреждение: Указано {len(reference_images)} изображений, используем первые 3")
+            print(f"Warning: {len(reference_images)} images specified, using first 3")
             reference_images = reference_images[:3]
 
-        # Подготавливаем референсы
+        # Prepare references
         prepared_images = self._prepare_reference_images(reference_images)
 
-        # Формируем запрос
+        # Form request
         headers = {
             "Content-Type": "application/json"
         }
@@ -160,7 +160,7 @@ class Veo31Client:
                     {
                         "text": prompt
                     },
-                    *prepared_images  # Добавляем все референсные изображения
+                    *prepared_images  # Add all reference images
                 ],
                 "generation_config": {
                     "temperature": 0.7,
@@ -171,9 +171,9 @@ class Veo31Client:
             }]
         }
 
-        # Если есть референсное видео, добавляем его
+        # If reference video exists, add it
         if video_reference:
-            # Для видео нужно использовать File API (аналогично Gemini)
+            # For video need to use File API (similar to Gemini)
             video_file = self._upload_video_reference(video_reference)
             if video_file:
                 payload["contents"][0]["parts"].append({
@@ -183,7 +183,7 @@ class Veo31Client:
                     }
                 })
 
-        # Отправляем запрос
+        # Send request
         url = f"{self.base_url}/models/{self.model}:generateContent?key={self.api_key}"
 
         try:
@@ -192,8 +192,8 @@ class Veo31Client:
 
             result = response.json()
 
-            # Veo 3.1 возвращает информацию о задаче генерации
-            # Нужно периодически проверять статус
+            # Veo 3.1 returns information about generation task
+            # Need to periodically check status
             if "video" in result or "task" in result:
                 return {
                     "status": "processing" if "task" in result else "completed",
@@ -209,10 +209,10 @@ class Veo31Client:
                 }
 
         except requests.RequestException as e:
-            raise Exception(f"Ошибка при генерации видео: {e}")
+            raise Exception(f"Error generating video: {e}")
 
     def _upload_video_reference(self, video_path: Union[str, Path, bytes, Dict]) -> Optional[Dict]:
-        """Загружает референсное видео через File API"""
+        """Uploads reference video via File API"""
         try:
             content_type = 'video/mp4'
             if isinstance(video_path, dict):
@@ -247,24 +247,24 @@ class Veo31Client:
             else:
                 return None
 
-            # Загружаем через File API
-            # Используем правильный формат согласно Gemini File API
+            # Upload via File API
+            # Use correct format according to Gemini File API
             upload_url = f"https://generativelanguage.googleapis.com/upload/v1beta/files?key={self.api_key}"
 
-            # Определяем MIME type
+            # Determine MIME type
             mime_type = content_type or 'video/mp4'
 
-            # Создаем multipart/related запрос
+            # Create multipart/related request
             filename = "video_reference.mp4"
 
-            # Создаем metadata
+            # Create metadata
             metadata = {
                 "file": {
                     "display_name": "video_reference"
                 }
             }
 
-            # Формируем запрос согласно документации
+            # Form request according to documentation
             headers = {
                 'X-Goog-Upload-Protocol': 'multipart'
             }
@@ -281,11 +281,11 @@ class Veo31Client:
             return response.json().get("file", {})
 
         except Exception as e:
-            print(f"Ошибка при загрузке видео-референса: {e}")
+            print(f"Error uploading video reference: {e}")
             return None
 
     def check_video_status(self, task_id: str) -> Dict:
-        """Проверяет статус генерации видео"""
+        """Checks video generation status"""
         url = f"{self.base_url}/tasks/{task_id}?key={self.api_key}"
 
         try:
@@ -293,28 +293,28 @@ class Veo31Client:
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
-            raise Exception(f"Ошибка при проверке статуса: {e}")
+            raise Exception(f"Error checking status: {e}")
 
 
-# Альтернативный вариант через Vertex AI (если используется)
+# Alternative via Vertex AI (if used)
 class Veo31VertexClient:
-    """Клиент через Vertex AI для Veo 3.1"""
+    """Client via Vertex AI for Veo 3.1"""
 
     def __init__(self, project_id: str, location: str = "us-central1"):
         self.project_id = project_id
         self.location = location
 
     def generate_video(self, prompt: str, reference_images: List[str], **kwargs):
-        """Генерация через Vertex AI"""
-        # Реализация через Vertex AI SDK
+        """Generation via Vertex AI"""
+        # Implementation via Vertex AI SDK
         pass
 
 
 if __name__ == "__main__":
-    # Тест
+    # Test
     client = Veo31Client()
 
-    # Пример использования
+    # Usage example
     result = client.generate_video_from_images(
         prompt="Rose gold ring with pink diamonds rotating slowly",
         reference_images=[
