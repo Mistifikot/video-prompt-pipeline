@@ -153,7 +153,8 @@ async def root():
             "veo31_kie_status": "/veo31/kie-status/{task_id}",
             "workflow_start": "/workflow/start",
             "workflow_submit": "/workflow/submit",
-            "workflow_state": "/workflow/{workflow_id}"
+            "workflow_state": "/workflow/{workflow_id}",
+            "workflow_status": "/workflow/{workflow_id}/status"
         }
     }
 
@@ -246,15 +247,33 @@ async def workflow_start(
 async def workflow_state(workflow_id: str):
     """Возвращает сохраненное состояние workflow (драфт промпта + анализы)."""
     if workflow_orchestrator is None:
-        raise HTTPException(status_code=500, detail="Workflow orchestrator не инициализирован")
+        raise HTTPException(status_code=503, detail="Workflow orchestrator не инициализирован")
 
     try:
-        state = workflow_orchestrator.state_storage.get_state(workflow_id)
-        if state is None:
-            raise HTTPException(status_code=404, detail="Workflow не найден")
+        state = workflow_orchestrator.get_workflow_state(workflow_id)
         return JSONResponse(content=state.to_public_dict())
     except KeyError:
         raise HTTPException(status_code=404, detail="Workflow не найден")
+
+
+@app.get("/workflow/{workflow_id}/status")
+async def workflow_status(workflow_id: str):
+    """Проверяет статус генерации видео для workflow через Kie.ai."""
+    if workflow_orchestrator is None:
+        raise HTTPException(status_code=503, detail="Workflow orchestrator не инициализирован")
+
+    try:
+        status_payload = workflow_orchestrator.refresh_generation_status(workflow_id)
+        return JSONResponse(content=status_payload)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} не найден")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:  # pragma: no cover - defensive branch for unexpected API errors
+        logger.error(f"Ошибка проверки статуса workflow {workflow_id}: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка проверки статуса: {exc}")
 
 
 @app.post("/workflow/submit")
