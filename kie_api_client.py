@@ -215,16 +215,38 @@ class KieVeoClient:
                             json_str = str(data)
                             video_patterns = [
                                 r'(https?://tempfile\.aiquickdraw\.com/[^\s"\']+\.mp4)',
+                                r'(https?://[^\s"\']+tempfile[^\s"\']+\.mp4)',
                                 r'(https?://[^\s"\']+\.mp4)',
                             ]
                             for pattern in video_patterns:
                                 matches = re.findall(pattern, json_str)
                                 if matches:
-                                    video_url = matches[0]
-                                    print(f"[i] Найдена ссылка на видео через regex: {video_url}")
-                                    break
+                                    # Берем первый найденный URL и проверяем его доступность
+                                    candidate_url = matches[0]
+                                    try:
+                                        # Быстрая проверка доступности URL
+                                        check_response = requests.head(candidate_url, timeout=2, allow_redirects=True)
+                                        if check_response.status_code == 200:
+                                            video_url = candidate_url
+                                            print(f"[i] Найдена доступная ссылка на видео через regex: {video_url}")
+                                            break
+                                    except:
+                                        # Если проверка не удалась, все равно берем URL (может быть временная проблема)
+                                        video_url = candidate_url
+                                        print(f"[i] Найдена ссылка на видео через regex (проверка недоступна): {video_url}")
+                                        break
 
                     if video_url:
+                        # Дополнительная проверка доступности video_url перед возвратом
+                        try:
+                            verify_response = requests.head(video_url, timeout=2, allow_redirects=True)
+                            if verify_response.status_code != 200:
+                                print(f"[!] Video URL найден, но недоступен (HTTP {verify_response.status_code}): {video_url}")
+                                # Все равно возвращаем URL, так как он может стать доступным позже
+                        except:
+                            print(f"[i] Video URL найден, но проверка доступности не удалась: {video_url}")
+                            # Продолжаем, так как это может быть временная проблема сети
+
                         result["video_url"] = video_url
                         result["status"] = "completed"
                         print(f"[OK] Видео готово! URL: {video_url}")
@@ -282,6 +304,7 @@ class KieVeoClient:
             test_url = f"https://tempfile.aiquickdraw.com/v/{task_id}_{test_timestamp}.mp4"
 
             try:
+                # Пробуем HEAD запрос
                 head_response = requests.head(test_url, timeout=3, allow_redirects=True)
                 if head_response.status_code == 200:
                     print(f"[OK] Видео найдено напрямую: {test_url}")
@@ -291,7 +314,24 @@ class KieVeoClient:
                         "video_url": test_url,
                         "method": "direct_check"
                     }
-            except:
+                # Если HEAD не поддерживается, пробуем GET с минимальным чтением
+                elif head_response.status_code == 405:  # Method Not Allowed
+                    get_response = requests.get(test_url, timeout=3, stream=True)
+                    if get_response.status_code == 200:
+                        # Читаем только первые байты для проверки
+                        get_response.raw.read(1024)
+                        get_response.close()
+                        print(f"[OK] Видео найдено через GET: {test_url}")
+                        return {
+                            "status": "completed",
+                            "task_id": task_id,
+                            "video_url": test_url,
+                            "method": "direct_check_get"
+                        }
+            except requests.exceptions.RequestException:
+                continue
+            except Exception as e:
+                # Игнорируем другие ошибки
                 continue
 
         # Если не нашли через прямой доступ, возвращаем ошибку

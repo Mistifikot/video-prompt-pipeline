@@ -7,14 +7,18 @@ import os
 import json
 import base64
 import logging
+import time
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union, List
+from typing import Dict, Optional, Tuple, Union, List, Any
 
 import mimetypes
 
 import cv2
+import numpy as np
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from PIL import Image
 
 
@@ -26,6 +30,56 @@ class VisualAnalyzer:
         self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
         self.preferred_model = "gpt-4o"  # GPT-4o поддерживает vision и видео
         self.logger = logging.getLogger(self.__class__.__name__)
+        self._http = self._build_retry_session()
+
+    def _build_retry_session(self) -> requests.Session:
+        """Создает requests.Session с повторными попытками для нестабильных сетей"""
+        retry = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            status=3,
+            backoff_factor=1.5,
+            status_forcelist=(408, 409, 425, 429, 500, 502, 503, 504),
+            allowed_methods=frozenset(["GET", "POST"]),
+            respect_retry_after_header=True,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session = requests.Session()
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        return session
+
+    def _post_with_retries(
+        self,
+        url: str,
+        *,
+        max_attempts: int = 4,
+        backoff_factor: float = 2.0,
+        raise_for_status: bool = True,
+        **kwargs,
+    ) -> requests.Response:
+        """Делает POST запрос с дополнительной экспоненциальной паузой между попытками"""
+        last_error: Optional[Exception] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = self._http.post(url, **kwargs)
+                if raise_for_status:
+                    response.raise_for_status()
+                return response
+            except requests.exceptions.RequestException as exc:
+                last_error = exc
+                self.logger.warning(
+                    "POST %s failed on attempt %s/%s: %s", url, attempt, max_attempts, exc
+                )
+                if attempt >= max_attempts:
+                    raise
+                sleep_seconds = backoff_factor ** (attempt - 1)
+                time.sleep(sleep_seconds)
+        # Если сюда дошли — бросаем последнюю ошибку
+        if last_error:
+            raise last_error
+        raise RuntimeError("Unexpected empty retry loop state")
 
     def _get_analysis_prompt(self) -> str:
         """Возвращает универсальный промпт для анализа медиа"""
@@ -283,7 +337,7 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                         'Connection': 'keep-alive'
                     }
 
-                response = requests.get(url, headers=headers, timeout=30, allow_redirects=True)
+                response = self._http.get(url, headers=headers, timeout=30, allow_redirects=True)
                 response.raise_for_status()
                 content_type = response.headers.get('content-type', '')
                 return response.content, content_type
@@ -345,8 +399,12 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             self.logger.debug("Image preprocessing failed, using original bytes: %s", exc)
             return image_bytes, "image/jpeg"
 
-    def _extract_video_frames(self, video_data: bytes, max_frames: int = 8) -> List[bytes]:
-        """Извлекает ключевые кадры из видео для анализа"""
+    def _extract_video_frames(
+        self,
+        video_data: bytes,
+        max_frames: int = 8,
+    ) -> Tuple[List[bytes], Dict[str, Any]]:
+        """Извлекает ключевые кадры и базовые метаданные из видео"""
         try:
             # Сохраняем временный файл
             import tempfile
@@ -356,31 +414,55 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
 
             cap = cv2.VideoCapture(tmp_path)
             if not cap.isOpened():
-                return []
+                return [], {}
 
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS)
-            duration = total_frames / fps if fps > 0 else 0
+            duration = float(total_frames / fps) if fps and fps > 0 else None
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-            # Выбираем кадры равномерно по длительности
-            frames_to_extract = min(max_frames, max(1, int(total_frames * (max_frames / total_frames))))
-            frame_interval = max(1, total_frames // max_frames)
+            frames_to_extract = max_frames if total_frames <= 0 else min(max_frames, total_frames)
+            frame_interval = max(1, (total_frames // frames_to_extract) if total_frames else 1)
 
-            extracted_frames = []
+            sampled_indices: List[int] = []
+            extracted_frames: List[bytes] = []
+            resized_gray_frames: List[np.ndarray] = []
+            brightness_values: List[float] = []
 
-            for i in range(0, total_frames, frame_interval):
-                if len(extracted_frames) >= max_frames:
-                    break
-                cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+            scale_factor = 1.0
+            if width > 0:
+                scale_factor = min(1.0, 320.0 / float(width))
+
+            current_index = 0
+            while current_index < total_frames and len(extracted_frames) < frames_to_extract:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, current_index)
                 ret, frame = cap.read()
-                if ret:
-                    # Конвертируем BGR в RGB
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    # Кодируем в JPEG
-                    img = Image.fromarray(frame_rgb)
-                    processed = self._resize_image(img)
-                    frame_bytes, _ = self._encode_image(processed)
-                    extracted_frames.append(frame_bytes)
+                if not ret:
+                    current_index += frame_interval
+                    continue
+
+                sampled_indices.append(current_index)
+
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(frame_rgb)
+                processed = self._resize_image(img)
+                frame_bytes, _ = self._encode_image(processed)
+                extracted_frames.append(frame_bytes)
+
+                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                if scale_factor < 1.0:
+                    gray_frame = cv2.resize(
+                        gray_frame,
+                        (0, 0),
+                        fx=scale_factor,
+                        fy=scale_factor,
+                        interpolation=cv2.INTER_AREA,
+                    )
+                resized_gray_frames.append(gray_frame)
+                brightness_values.append(float(np.mean(gray_frame)))
+
+                current_index += frame_interval
 
             cap.release()
 
@@ -390,11 +472,195 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             except:
                 pass
 
-            return extracted_frames
+            metadata: Dict[str, Any] = {
+                "frame_count": total_frames if total_frames > 0 else None,
+                "fps": float(fps) if fps and fps > 0 else None,
+                "duration_s": round(duration, 3) if duration else None,
+                "resolution_px": {"w": width, "h": height} if width and height else None,
+                "sampled_frames": len(extracted_frames),
+                "sample_indices": sampled_indices,
+            }
+
+            if brightness_values:
+                metadata["luma_stats"] = {
+                    "avg": round(float(np.mean(brightness_values)), 3),
+                    "min": round(float(np.min(brightness_values)), 3),
+                    "max": round(float(np.max(brightness_values)), 3),
+                    "std": round(float(np.std(brightness_values)), 3),
+                }
+
+            motion_metadata = self._estimate_video_motion(resized_gray_frames, metadata.get("fps"))
+            if motion_metadata:
+                metadata["auto_motion"] = motion_metadata
+
+            return extracted_frames, metadata
 
         except Exception as e:
-            print(f"Ошибка извлечения кадров: {e}")
-            return []
+            self.logger.error(f"Ошибка извлечения кадров: {e}")
+            return [], {}
+
+    def _estimate_video_motion(
+        self,
+        gray_frames: List[np.ndarray],
+        fps: Optional[float],
+    ) -> Dict[str, Any]:
+        """Пытается оценить движение камеры и объекта на основе оптического потока"""
+        if len(gray_frames) < 2:
+            return {}
+
+        flow_magnitudes: List[float] = []
+        translation_magnitudes: List[float] = []
+        rotation_scores: List[float] = []
+        direction_vectors: List[Tuple[float, float]] = []
+
+        for prev_gray, next_gray in zip(gray_frames[:-1], gray_frames[1:]):
+            try:
+                flow = cv2.calcOpticalFlowFarneback(
+                    prev_gray,
+                    next_gray,
+                    None,
+                    pyr_scale=0.5,
+                    levels=3,
+                    winsize=25,
+                    iterations=3,
+                    poly_n=5,
+                    poly_sigma=1.2,
+                    flags=0,
+                )
+            except cv2.error:
+                continue
+
+            flow_x = flow[..., 0]
+            flow_y = flow[..., 1]
+            mean_x = float(np.mean(flow_x))
+            mean_y = float(np.mean(flow_y))
+            translation_vector = (mean_x, mean_y)
+            direction_vectors.append(translation_vector)
+            translation_magnitudes.append(float(np.hypot(mean_x, mean_y)))
+            flow_magnitudes.append(float(np.mean(np.hypot(flow_x, flow_y))))
+
+            h, w = prev_gray.shape
+            ys, xs = np.mgrid[0:h, 0:w]
+            rel_x = (xs - (w / 2.0)) / max(w, 1)
+            rel_y = (ys - (h / 2.0)) / max(h, 1)
+            rotation = float(np.mean((rel_x * flow_y) - (rel_y * flow_x)))
+            rotation_scores.append(rotation)
+
+        if not flow_magnitudes:
+            return {}
+
+        avg_flow = float(np.mean(flow_magnitudes))
+        median_translation = float(np.median(translation_magnitudes)) if translation_magnitudes else 0.0
+        median_rotation = float(np.median(rotation_scores)) if rotation_scores else 0.0
+        rotation_strength = float(np.median(np.abs(rotation_scores))) if rotation_scores else 0.0
+
+        translation_threshold = 0.08
+        translation_high_threshold = 0.18
+        rotation_threshold = 0.015
+
+        if median_translation < translation_threshold and rotation_strength > rotation_threshold:
+            dominant_motion = "static_camera_subject_rotation"
+        elif median_translation >= translation_threshold:
+            dominant_motion = "camera_motion"
+        else:
+            dominant_motion = "mostly_static"
+
+        camera_support_guess = "tripod"
+        if dominant_motion == "camera_motion":
+            camera_support_guess = "stabilized"
+            if median_translation > translation_high_threshold:
+                camera_support_guess = "handheld"
+
+        subject_motion = "none"
+        if dominant_motion == "static_camera_subject_rotation":
+            subject_motion = "axial_rotation"
+        elif rotation_strength > rotation_threshold * 1.5:
+            subject_motion = "combined"
+
+        avg_direction_x = float(np.mean([vec[0] for vec in direction_vectors])) if direction_vectors else 0.0
+        avg_direction_y = float(np.mean([vec[1] for vec in direction_vectors])) if direction_vectors else 0.0
+        avg_direction_deg = None
+        if avg_direction_x or avg_direction_y:
+            avg_direction_deg = round(float(np.degrees(np.arctan2(avg_direction_y, avg_direction_x))), 2)
+
+        motion_summary: Dict[str, Any] = {
+            "dominant_motion": dominant_motion,
+            "average_flow_px": round(avg_flow, 4),
+            "median_translation_px": round(median_translation, 4),
+            "median_rotation_score": round(median_rotation, 5),
+            "rotation_strength": round(rotation_strength, 5),
+            "camera_support_guess": camera_support_guess,
+            "subject_motion": subject_motion,
+            "sample_pairs": len(flow_magnitudes),
+            "confidence": round(min(1.0, len(flow_magnitudes) / 4.0), 3),
+        }
+
+        if avg_direction_deg is not None:
+            motion_summary["camera_translation_direction_deg"] = avg_direction_deg
+
+        if fps:
+            motion_summary["pair_interval_s"] = round(float(1.0 / fps), 4)
+
+        if rotation_strength > rotation_threshold:
+            motion_summary["rotation_direction"] = "counter_clockwise" if median_rotation > 0 else "clockwise"
+
+        return motion_summary
+
+    def _format_video_insights(self, metadata: Dict[str, Any]) -> str:
+        """Формирует текстовый блок с объективными метриками видео для подсказки модели"""
+        if not metadata:
+            return ""
+
+        lines: List[str] = []
+        fps = metadata.get("fps")
+        duration = metadata.get("duration_s")
+        resolution = metadata.get("resolution_px")
+
+        if fps:
+            lines.append(f"- Estimated FPS: {fps}")
+        if duration:
+            lines.append(f"- Duration: {duration} sec")
+        if resolution:
+            lines.append(
+                f"- Native resolution: {resolution.get('w')}x{resolution.get('h')}"
+            )
+
+        luma_stats = metadata.get("luma_stats")
+        if isinstance(luma_stats, dict) and luma_stats:
+            lines.append(
+                "- Average scene luminance (0-255): "
+                f"avg={luma_stats.get('avg')}, min={luma_stats.get('min')}, max={luma_stats.get('max')}"
+            )
+
+        auto_motion = metadata.get("auto_motion")
+        if isinstance(auto_motion, dict) and auto_motion:
+            dominant = auto_motion.get("dominant_motion")
+            if dominant:
+                lines.append(f"- Dominant motion classification: {dominant}")
+            subject_motion = auto_motion.get("subject_motion")
+            if subject_motion and subject_motion != "none":
+                lines.append(f"- Subject motion heuristic: {subject_motion}")
+            support = auto_motion.get("camera_support_guess")
+            if support:
+                lines.append(f"- Likely camera support: {support}")
+            rotation_dir = auto_motion.get("rotation_direction")
+            if rotation_dir:
+                lines.append(f"- Rotation direction: {rotation_dir}")
+            translation_mag = auto_motion.get("median_translation_px")
+            if translation_mag is not None:
+                lines.append(f"- Median camera translation flow: {translation_mag} px")
+            avg_flow = auto_motion.get("average_flow_px")
+            if avg_flow is not None:
+                lines.append(f"- Average optical-flow magnitude: {avg_flow} px")
+
+        if not lines:
+            return ""
+
+        lines.append(
+            "- Integrate these metrics into camera_motion and lighting notes. If the camera is static but the subject rotates, spell it out."
+        )
+
+        return "VIDEO STRUCTURAL INSIGHTS (objective measurements):\n" + "\n".join(lines)
 
     def _encode_media_to_base64(self, media_data: bytes) -> str:
         """Кодирует медиа в base64"""
@@ -436,17 +702,26 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             raise ValueError("OpenAI API key не найден")
 
         analysis_prompt = self._get_analysis_prompt()
+        video_metadata: Dict[str, Any] = {}
 
         # Для видео извлекаем несколько кадров
         if is_video:
-            frames = self._extract_video_frames(media_data, max_frames=8)
+            frames, video_metadata = self._extract_video_frames(media_data, max_frames=8)
             if not frames:
                 raise ValueError("Не удалось извлечь кадры из видео")
+
+            insights_block = self._format_video_insights(video_metadata)
+            prompt_text = analysis_prompt
+            if insights_block:
+                prompt_text = (
+                    f"{analysis_prompt}\n\n{insights_block}\n"
+                    "Ensure the JSON camera_motion keyframes and transfer prompt strictly follow these measured cues."
+                )
 
             # Анализируем несколько кадров для понимания динамики
             content_parts = [{
                 "type": "text",
-                "text": analysis_prompt
+                "text": prompt_text
             }]
 
             for frame in frames[:4]:  # Используем первые 4 кадра для анализа
@@ -502,20 +777,54 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             "temperature": 0.3
         }
 
-        response = requests.post(
+        response = self._post_with_retries(
             "https://api.openai.com/v1/chat/completions",
             headers=headers,
             json=payload,
-            timeout=120  # Увеличен timeout для детального анализа
+            timeout=120,  # Увеличен timeout для детального анализа
         )
-        response.raise_for_status()
-
         result = response.json()
         analysis_text = result['choices'][0]['message']['content']
 
         analysis_json = self._extract_json_from_text(analysis_text)
         if "raw_analysis" not in analysis_json:
             analysis_json["raw_analysis"] = analysis_text
+
+        if video_metadata:
+            analysis_json.setdefault("metadata", {})
+            analysis_json["metadata"]["auto_video_insights"] = video_metadata
+
+            # Дополнительно пробрасываем эвристику движения, если модель не заполнила блок camera_motion
+            auto_motion = video_metadata.get("auto_motion")
+            if auto_motion:
+                if not analysis_json.get("camera_motion"):
+                    analysis_json["camera_motion"] = {
+                        "support": auto_motion.get("camera_support_guess"),
+                        "dominant_motion": auto_motion.get("dominant_motion"),
+                        "notes": "Auto-computed fallback; please validate",
+                    }
+                # КРИТИЧНО: Добавляем движение объекта, если оно есть
+                subject_motion = auto_motion.get("subject_motion")
+                if subject_motion and subject_motion != "none":
+                    # Добавляем в camera_motion для доступности генератору промптов
+                    if isinstance(analysis_json.get("camera_motion"), dict):
+                        analysis_json["camera_motion"]["subject_motion"] = subject_motion
+                        analysis_json["camera_motion"]["subject_motion_notes"] = (
+                            "Object movement detected: " + subject_motion +
+                            ". Ensure prompt includes micro-movements or subject rotation."
+                        )
+                    # Также добавляем на верхний уровень для легкого доступа
+                    analysis_json["subject_motion_detected"] = subject_motion
+
+            media_block = analysis_json.setdefault("media", {})
+            if video_metadata.get("fps") and not media_block.get("fps"):
+                media_block["fps"] = video_metadata["fps"]
+            if video_metadata.get("duration_s") and not media_block.get("duration_s"):
+                media_block["duration_s"] = video_metadata["duration_s"]
+            if video_metadata.get("resolution_px") and not media_block.get("resolution_px"):
+                media_block["resolution_px"] = video_metadata["resolution_px"]
+            if not media_block.get("type"):
+                media_block["type"] = "video"
 
         return analysis_json
 
@@ -570,14 +879,12 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
                 }
             }
 
-            response = requests.post(
+            response = self._post_with_retries(
                 f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}",
                 headers=headers,
                 json=payload,
-                timeout=60
+                timeout=60,
             )
-            response.raise_for_status()
-
             result = response.json()
             analysis_text = result['candidates'][0]['content']['parts'][0]['text']
 
@@ -605,7 +912,13 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             'file': ('video_analysis.mp4', video_data, mime_type)
         }
 
-        response = requests.post(upload_url, headers=headers, files=files, timeout=120)
+        response = self._post_with_retries(
+            upload_url,
+            headers=headers,
+            files=files,
+            timeout=120,
+            raise_for_status=False,
+        )
         if response.status_code >= 400:
             raise ValueError(f"Gemini File API error {response.status_code}: {response.text}")
         file_metadata = response.json()
@@ -615,7 +928,6 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             raise ValueError("Не удалось загрузить видео в Gemini File API")
 
         # Шаг 2: Ждем пока файл обработается (опционально, можно пропустить для быстрых запросов)
-        import time
         time.sleep(2)  # Небольшая задержка для обработки файла
 
         # Шаг 3: Анализируем видео через generateContent API
@@ -645,21 +957,19 @@ Factual, concise, reproducible. No stylistic flourishes. Use standard terminolog
             }
         }
 
-        response = requests.post(
+        response = self._post_with_retries(
             f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={self.gemini_api_key}",
             headers=headers,
             json=payload,
-            timeout=120
+            timeout=120,
         )
-        response.raise_for_status()
-
         result = response.json()
         analysis_text = result['candidates'][0]['content']['parts'][0]['text']
 
         # Удаляем файл после анализа (опционально)
         try:
             delete_url = f"https://generativelanguage.googleapis.com/v1beta/{file_uri}?key={self.gemini_api_key}"
-            requests.delete(delete_url, timeout=10)
+            self._http.delete(delete_url, timeout=10)
         except:
             pass  # Игнорируем ошибки удаления
 

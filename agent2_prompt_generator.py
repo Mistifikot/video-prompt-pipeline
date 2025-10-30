@@ -275,16 +275,22 @@ CRITICAL WORKFLOW INSTRUCTION:
 
 КРИТИЧЕСКИ ВАЖНО - ДЕТАЛИЗАЦИЯ ДЛЯ Veo 3.1:
 - Промт должен быть ОЧЕНЬ ДЕТАЛЬНЫМ (минимум 300-500 слов, можно больше)
+- ВАЖНО: Veo требует временную динамику - ВСЕГДА добавляй микродвижения объекта:
+  * Проверь subject_motion_detected или camera_motion.subject_motion или metadata.auto_video_insights.auto_motion.subject_motion
+  * Если есть движение объекта - опиши его детально (вращение, покачивание, и т.д.)
+  * Если движения нет - ВСЕ РАВНО добавь микродвижения: "gently sway", "sparkle glints travel", "micro-reflections dance"
+  * НИКОГДА не создавай статичный кадр - объект должен иметь хотя бы минимальное движение
 - Используй ВСЕ данные из анализа, особенно:
   * subjects - опиши каждый объект (name, class, materials, colors)
   * camera_motion.keyframes - опиши каждый keyframe с временем (t_s), типом движения (type), позицией (position_m), поворотом (rotation_euler_deg), easing, duration
   * camera_motion.support - тип поддержки камеры (tripod, handheld, steadicam, gimbal, dolly, crane, drone)
+  * camera_motion.dominant_motion - если "static_camera_subject_rotation", обязательно опиши движение объекта
   * lighting.lights - опиши КАЖДЫЙ источник света с ролью (role), позицией (position_m), дистанцией (distance_m), размером (size_m), модификатором (modifier), мягкостью (softness), интенсивностью (intensity_rel), цветовой температурой (color_temp_K), углом (angle_deg)
   * lighting.environment - опиши окружение (type, time_of_day, weather, reflections)
   * optics - используй ВСЕ данные: focal_length_mm, fov_deg, aperture_T, focus_distance_m, focus_pulls, distortion, vignetting, chromatic_aberration
   * composition - опиши композицию: shot_size (ECU/CU/MCU/MS/MLS/WS/EWS), framing (rule_of_thirds, symmetry, leading_lines, negative_space), depth_of_field, bokeh_notes
   * color_and_post - опиши цветокоррекцию: white_balance_K, look (contrast, saturation, hue shifts), grain_noise, halation_bloom, sharpness
-  * media - используй fps, duration_s, aspect_ratio, resolution_px
+  * media - используй fps, duration_s, aspect_ratio (если 1:1, используй 16:9), resolution_px
 - Если есть видео-референс с camera_motion.keyframes, ОБЯЗАТЕЛЬНО включи детальное описание движения камеры ВО ВРЕМЕНИ - каждый keyframe должен быть описан отдельно с указанием того, что происходит в этот момент времени
 - НЕ сокращай технические детали - Veo 3.1 требует максимальной специфичности
 - Каждое движение камеры должно быть описано с указанием типа (pan/tilt/dolly/truck/pedestal/crane/arc/roll/zoom), направления, скорости, easing (linear/easeIn/easeOut/easeInOut)
