@@ -35,7 +35,15 @@ class PromptWorkflowState:
         """Representation that can be sent via API responses."""
         public_payload = asdict(self)
         # internal fields should not leak (e.g. we don't expose combined_description twice)
-        public_payload.setdefault("status", "awaiting_user_confirmation")
+        workflow_status = (
+            self.metadata.get("workflow", {}).get("status")
+            if isinstance(self.metadata, dict)
+            else None
+        )
+        if workflow_status:
+            public_payload["status"] = workflow_status
+        else:
+            public_payload.setdefault("status", "awaiting_user_confirmation")
         return public_payload
 
     @classmethod
@@ -264,12 +272,17 @@ class VideoImagePromptWorkflow:
         if isinstance(response, dict):
             task_id = response.get("data", {}).get("taskId") or response.get("taskId")
         if task_id:
-            state.metadata.setdefault("kie", {})["task_id"] = task_id
+            kie_meta = state.metadata.setdefault("kie", {})
+            kie_meta["task_id"] = task_id
+            kie_meta["status"] = "submitted"
+            kie_meta["last_response"] = response
             result_payload["task_id"] = task_id
 
+        workflow_meta = state.metadata.setdefault("workflow", {})
+        workflow_meta["status"] = "submitted_to_kie"
+
+        self._active_workflows[workflow_id] = state
         self._state_storage.save_state(state)
-        self._active_workflows.pop(workflow_id, None)
-        self._state_storage.delete_state(workflow_id)
 
         return result_payload
 
@@ -282,6 +295,50 @@ class VideoImagePromptWorkflow:
         if state is None:
             raise KeyError(f"Workflow с идентификатором {workflow_id} не найден")
         return state
+
+    def refresh_generation_status(self, workflow_id: str) -> Dict[str, Any]:
+        """Checks the remote generation task and updates workflow metadata."""
+        if self.kie_client is None:
+            raise RuntimeError(
+                "Kie.ai клиент не инициализирован. Проверьте KIE_API_KEY для проверки статуса"
+            )
+
+        state = self.get_workflow_state(workflow_id)
+        kie_meta = state.metadata.setdefault("kie", {})
+        task_id = kie_meta.get("task_id")
+        if not task_id:
+            raise ValueError(
+                "Workflow ещё не был отправлен на генерацию или task_id отсутствует"
+            )
+
+        status_payload = self.kie_client.check_task_status(task_id)
+        kie_meta["last_status"] = status_payload
+        if isinstance(status_payload, dict):
+            status_value = status_payload.get("status") or kie_meta.get("status")
+            if status_value:
+                kie_meta["status"] = status_value
+            video_url = status_payload.get("video_url")
+            if video_url:
+                kie_meta["video_url"] = video_url
+
+        workflow_meta = state.metadata.setdefault("workflow", {})
+        workflow_meta["status"] = kie_meta.get("status", "processing")
+        if kie_meta.get("video_url"):
+            workflow_meta.setdefault("result", {})["video_url"] = kie_meta["video_url"]
+
+        public_payload = state.to_public_dict()
+        public_payload["task_id"] = task_id
+        public_payload["kie_status"] = status_payload
+
+        if kie_meta.get("status") == "completed":
+            workflow_meta["status"] = "completed"
+            self._active_workflows.pop(workflow_id, None)
+            self._state_storage.delete_state(workflow_id)
+        else:
+            self._active_workflows[workflow_id] = state
+            self._state_storage.save_state(state)
+
+        return public_payload
 
     # ------------------------------------------------------------------
     # Helpers
