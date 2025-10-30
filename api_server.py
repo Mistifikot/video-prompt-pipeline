@@ -249,7 +249,9 @@ async def workflow_state(workflow_id: str):
         raise HTTPException(status_code=500, detail="Workflow orchestrator не инициализирован")
 
     try:
-        state = workflow_orchestrator.get_workflow_state(workflow_id)
+        state = workflow_orchestrator.state_storage.get_state(workflow_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="Workflow не найден")
         return JSONResponse(content=state.to_public_dict())
     except KeyError:
         raise HTTPException(status_code=404, detail="Workflow не найден")

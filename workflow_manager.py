@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 import mimetypes
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, fields
 from pathlib import Path
+from threading import Lock
 from typing import Dict, Optional, Union, Any
 
 from pipeline import VideoPromptPipeline
@@ -36,6 +38,100 @@ class PromptWorkflowState:
         public_payload.setdefault("status", "awaiting_user_confirmation")
         return public_payload
 
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "PromptWorkflowState":
+        """Recreates a state object from JSON-compatible payload."""
+        valid_fields = {item.name for item in fields(cls)}
+        init_payload: Dict[str, Any] = {}
+        for key in valid_fields:
+            if key in payload:
+                init_payload[key] = payload[key]
+        return cls(**init_payload)  # type: ignore[arg-type]
+
+
+class WorkflowStateStorage:
+    """Abstract interface for persisting workflow states."""
+
+    def load_all(self) -> Dict[str, PromptWorkflowState]:  # pragma: no cover - interface definition
+        raise NotImplementedError
+
+    def save_state(self, state: PromptWorkflowState) -> None:  # pragma: no cover - interface definition
+        raise NotImplementedError
+
+    def delete_state(self, workflow_id: str) -> None:  # pragma: no cover - interface definition
+        raise NotImplementedError
+
+    def get_state(self, workflow_id: str) -> Optional[PromptWorkflowState]:  # pragma: no cover - interface definition
+        raise NotImplementedError
+
+
+class FileWorkflowStateStorage(WorkflowStateStorage):
+    """Simple JSON file storage for workflow states."""
+
+    def __init__(self, storage_path: Union[str, Path]) -> None:
+        self.storage_path = Path(storage_path)
+        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = Lock()
+
+    def _read_raw(self) -> Dict[str, Any]:
+        if not self.storage_path.exists():
+            return {}
+        try:
+            with self.storage_path.open("r", encoding="utf-8") as handle:
+                return json.load(handle)
+        except json.JSONDecodeError:
+            # Corrupted storage, start afresh but keep backup copy for troubleshooting
+            backup_path = self.storage_path.with_suffix(self.storage_path.suffix + ".bak")
+            try:
+                if backup_path.exists():
+                    backup_path.unlink()
+                self.storage_path.replace(backup_path)
+            except OSError:
+                try:
+                    self.storage_path.unlink()
+                except OSError:
+                    pass
+            return {}
+
+    def _write_raw(self, data: Dict[str, Any]) -> None:
+        tmp_path = self.storage_path.with_suffix(self.storage_path.suffix + ".tmp")
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=2)
+        tmp_path.replace(self.storage_path)
+
+    def load_all(self) -> Dict[str, PromptWorkflowState]:
+        raw = self._read_raw()
+        states: Dict[str, PromptWorkflowState] = {}
+        for workflow_id, payload in raw.items():
+            try:
+                states[workflow_id] = PromptWorkflowState.from_dict(payload)
+            except TypeError:
+                continue
+        return states
+
+    def save_state(self, state: PromptWorkflowState) -> None:
+        with self._lock:
+            raw = self._read_raw()
+            raw[state.workflow_id] = asdict(state)
+            self._write_raw(raw)
+
+    def delete_state(self, workflow_id: str) -> None:
+        with self._lock:
+            raw = self._read_raw()
+            if workflow_id in raw:
+                raw.pop(workflow_id)
+                self._write_raw(raw)
+
+    def get_state(self, workflow_id: str) -> Optional[PromptWorkflowState]:
+        raw = self._read_raw()
+        payload = raw.get(workflow_id)
+        if not payload:
+            return None
+        try:
+            return PromptWorkflowState.from_dict(payload)
+        except TypeError:
+            return None
+
 
 class VideoImagePromptWorkflow:
     """Coordinates the new workflow: analyze video, analyze image, wait for user edit, then send to Kie.ai."""
@@ -44,6 +140,7 @@ class VideoImagePromptWorkflow:
         self,
         pipeline: VideoPromptPipeline,
         kie_api_key: Optional[str] = None,
+        state_storage: Optional[WorkflowStateStorage] = None,
     ) -> None:
         self.pipeline = pipeline
         self.kie_client: Optional[KieVeoClient] = None
@@ -54,7 +151,14 @@ class VideoImagePromptWorkflow:
                 raise RuntimeError(f"Не удалось инициализировать Kie.ai клиента: {error}")
 
         self.image_uploader: Optional[ImageUploader] = build_image_uploader()
-        self._active_workflows: Dict[str, PromptWorkflowState] = {}
+        storage_path = os.getenv("WORKFLOW_STATE_PATH", "workflow_states.json")
+        self._state_storage: WorkflowStateStorage = state_storage or FileWorkflowStateStorage(storage_path)
+        self._active_workflows: Dict[str, PromptWorkflowState] = self._state_storage.load_all()
+
+    @property
+    def state_storage(self) -> WorkflowStateStorage:
+        """Expose storage for read-only operations (e.g. API layer)."""
+        return self._state_storage
 
     # ------------------------------------------------------------------
     # Public API
@@ -112,6 +216,7 @@ class VideoImagePromptWorkflow:
         )
 
         self._active_workflows[workflow_state.workflow_id] = workflow_state
+        self._state_storage.save_state(workflow_state)
         return workflow_state
 
     def finalize_workflow(
@@ -162,10 +267,18 @@ class VideoImagePromptWorkflow:
             state.metadata.setdefault("kie", {})["task_id"] = task_id
             result_payload["task_id"] = task_id
 
+        self._state_storage.save_state(state)
+        self._active_workflows.pop(workflow_id, None)
+        self._state_storage.delete_state(workflow_id)
+
         return result_payload
 
     def get_workflow_state(self, workflow_id: str) -> PromptWorkflowState:
         state = self._active_workflows.get(workflow_id)
+        if state is None:
+            state = self._state_storage.get_state(workflow_id)
+            if state:
+                self._active_workflows[workflow_id] = state
         if state is None:
             raise KeyError(f"Workflow с идентификатором {workflow_id} не найден")
         return state
@@ -258,4 +371,6 @@ class VideoImagePromptWorkflow:
 __all__ = [
     "PromptWorkflowState",
     "VideoImagePromptWorkflow",
+    "WorkflowStateStorage",
+    "FileWorkflowStateStorage",
 ]
